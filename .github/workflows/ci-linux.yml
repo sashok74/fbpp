@@ -1,0 +1,95 @@
+name: CI - Linux
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler:
+          - { cc: gcc-11, cxx: g++-11 }
+          - { cc: clang-14, cxx: clang++-14 }
+        build_type: [Release, Debug]
+
+    services:
+      firebird:
+        image: jacobalberty/firebird:v5.0
+        env:
+          FIREBIRD_USER: SYSDBA
+          FIREBIRD_PASSWORD: masterkey
+          ISC_PASSWORD: masterkey
+        ports:
+          - 3050:3050
+        options: >-
+          --health-cmd "/usr/local/firebird/bin/isql -z"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            ${{ matrix.compiler.cc }} \
+            ${{ matrix.compiler.cxx }} \
+            libfbclient2 \
+            firebird-dev \
+            python3-pip
+
+          pip3 install conan
+          conan --version
+
+      - name: Setup Conan profile
+        run: |
+          conan profile detect --force
+          conan profile show default
+
+      - name: Configure CMake
+        env:
+          CC: ${{ matrix.compiler.cc }}
+          CXX: ${{ matrix.compiler.cxx }}
+        run: |
+          mkdir -p build
+          cd build
+          conan install .. --build=missing -s build_type=${{ matrix.build_type }}
+          cmake .. \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DBUILD_TESTING=ON \
+            -DBUILD_EXAMPLES=ON
+
+      - name: Build
+        run: |
+          cd build
+          cmake --build . -j$(nproc)
+
+      - name: Run tests
+        env:
+          FIREBIRD_HOST: localhost
+          FIREBIRD_PORT: 3050
+          FIREBIRD_USER: SYSDBA
+          FIREBIRD_PASSWORD: masterkey
+        run: |
+          cd build
+          ctest --output-on-failure --verbose
+
+      - name: Check formatting (clang-format)
+        if: matrix.compiler.cxx == 'clang++-14' && matrix.build_type == 'Release'
+        run: |
+          sudo apt-get install -y clang-format-14
+          find include src tests examples -name '*.cpp' -o -name '*.hpp' -o -name '*.h' | \
+            xargs clang-format-14 --dry-run --Werror
