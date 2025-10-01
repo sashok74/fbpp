@@ -1,0 +1,71 @@
+* dbc4848 (HEAD -> feature/statement-cache) chore: Remove unused includes from test_cancel_operation.cpp
+* 5cc2e72 feat: Add cancelOperation support to Connection class
+* 8f12e4a refactor: Standardize test naming convention
+* 01482d5 refactor: Standardize test database connection using TempDatabaseTest base class
+* 43092d1 feat: Add named parameters support for SQL queries
+* f57dbe9 docs: Update project status and remove redundant example
+* 2e136c6 fix: Update remaining test and documentation for new API
+* 9def5f9 refactor: Simplify API - rename getCachedStatement to prepareStatement
+* 5eadea5 feat: Complete Stage 2.5 - Cache validation and performance measurement
+* 2cc987f docs: Add stage 2.5 for cache validation and API refactoring
+* c631e5b feat: Implement prepared statement cache with LRU eviction
+*   f4f7a05 (main) Merge branch 'lib_v1': TTMath numeric support and cache spec
+|\  
+| * ce02d20 (lib_v1) feat: Add prepared statement cache implementation specification
+| * 2d62711 refactor: Simplify and consolidate examples
+| * 10ab0da refactor: Clean up and deduplicate test suite
+| * eb52538 refactor: Simplify library structure for v1.0
+|/  
+* bc98cfc (v3) v3 worked and clear
+* 9e76f9f ttmath numeric
+* 3a93205 feat: Add adapter support to tuple unpacker
+* e8ff7b2 feat: Add type adapter system with TTMath Int128 support
+* 60b2be3 start add lib
+* 7fd236f type work 2
+* f3ff3cb type work 1
+* 454a1e7 refactoring err example
+* a0016f2 refactoring fetch 1
+* 1b6899e refactoring fetch
+* c4bb52a refactor: Unify Statement architecture with universal pack/unpack functions
+* a9d9a81 example json
+* e15a6a4 example json
+* 6d9f4e2 refactor: Integrate JSON support into generic Statement template methods
+* 4b9d1d0 feat: Implement JSON unpacker for Firebird data with full type support
+* 131753e refactor: Replace batch operation emulation with real IBatch API
+* 92abe38 feat: Add comprehensive batch operations examples
+* be4dd64 feat: Enhance connection example with data reading capability
+* cd86892 feat: Add connection example demonstrating fbpp usage
+* 8260386 feat: Implement batch operations for efficient bulk inserts
+* 52662ea refactor: Move execute with RETURNING to Transaction class
+* fc3f43d feat: Add support for INSERT...RETURNING clause
+* ed3e3fc Implement weak_ptr pattern for safe ResultSet lifetime management
+* 85d1eb8 feat: Add Transaction-based API and automatic BLOB handling
+* 0906063 feat: add TextBlob class for automatic text BLOB handling
+* 62fb121 tuple doc
+* ed25392 feat: Add tuple unpacking and comparison in AllTypesWriteAndRead test
+* dba8e86 feat: Add NUMERIC(18,4) and NUMERIC(38,2) support to AllTypesWriteAndRead test
+* 7932fd8 дата вроде работает с TZ
+* 428ba11 доводим tuple 2
+* 65ae78f доводим tuple
+* 8ac2160 status теперь один на класс(экземпляр). и удаляется классом.
+* 5dc3d32 работает конекщен. надо делать обработку ошибок
+* b1b39cf stop..
+* 5abe603 правка инклудов
+*   8f91b18 new main
+|\  
+| * 4c69134 (fix/from-cff4d529378ccd758d13b1a4ab322ec68c23572b) фиксируем более менее нормальную версию
+* | 3ea9e4f json packer
+| | * 62df053 (fix/firebird-dml-status) тупик.. думаю плагины пакеров
+| | * a6cd934 Fix INT128 handling in JsonPackerV2
+| | * f0bbfc9 feat: implement JsonPackerV2 with IMessagePacker interface
+| | * 8e9a2f1 feat: implement TypedPacker - type-safe wrapper for IMessagePacker
+| | * 60973d6 feat: Implement MessageWriter/Reader with full Firebird type support
+| | * dca8a69 feat: Implement base types and interfaces for pluggable message packers
+| |/  
+| * cff4d52 reafactoring
+| * f71306b add blob
+| * 6ef01a4 binding
+| * 5ba89b5 test wrapper
+| * 261521e step3
+|/  
+* 44677c9 (origin/main) start

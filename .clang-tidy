@@ -1,0 +1,4 @@
+---
+Checks: '-*,misc-unused-using-decls,readability-redundant-include'
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*'

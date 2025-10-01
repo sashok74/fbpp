@@ -1,0 +1,11 @@
+[requires]
+gtest/1.14.0
+spdlog/1.12.0
+nlohmann_json/3.11.3
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout

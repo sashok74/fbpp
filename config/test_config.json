@@ -1,0 +1,37 @@
+{
+  "db": {
+    "server": "firebird5",
+    "path": "/mnt/test/binding_test.fdb",
+    "user": "SYSDBA",
+    "password": "planomer",
+    "charset": "UTF8",
+    "create_if_missing": true,
+    "drop_on_cleanup": true
+  },
+  "logging": {
+    "level": "debug",
+    "console": true,
+    "file": true,
+    "file_path": "logs/binding_lab.log",
+    "rotate_max_size_mb": 5,
+    "rotate_max_files": 3
+  },
+  "tests": {
+    "persistent_db": {
+      "path": "testdb",
+      "server": "firebird5",
+      "user": "SYSDBA",
+      "password": "planomer",
+      "charset": "UTF8",
+      "create_once": true
+    },
+    "temp_db": {
+      "path": "/mnt/test/fbpp_temp_test.fdb",
+      "server": "firebird5",
+      "user": "SYSDBA",
+      "password": "planomer",
+      "charset": "UTF8",
+      "recreate_each_test": true
+    }
+  }
+}

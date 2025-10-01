@@ -1,0 +1,24 @@
+{
+  "db": {
+    "server": "localhost",
+    "path": "/path/to/database.fdb",
+    "path_test_temp_db": "/tmp/test.fdb",
+    "user": "SYSDBA",
+    "password": "CHANGE_ME",
+    "charset": "UTF8",
+    "create_if_missing": false,
+    "drop_on_cleanup": false
+  },
+  "logging": {
+    "level": "info",
+    "console": true,
+    "file": true,
+    "file_path": "logs/fbpp.log",
+    "rotate_max_size_mb": 10,
+    "rotate_max_files": 5
+  },
+  "tests": {
+    "skip_create_schema": false,
+    "log_level": "debug"
+  }
+}
