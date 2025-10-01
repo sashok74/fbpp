@@ -65,11 +65,12 @@ jobs:
           mkdir -p build
           cd build
           conan install .. --build=missing -s build_type=${{ matrix.build_type }}
+          source conanbuild.sh
           cmake .. \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DCMAKE_CXX_STANDARD=20 \
-            -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake \
+            -DCMAKE_TOOLCHAIN_FILE=build/generators/conan_toolchain.cmake \
             -DBUILD_TESTING=ON \
             -DBUILD_EXAMPLES=ON
 
