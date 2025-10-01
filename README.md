@@ -9,11 +9,11 @@ Modern, type-safe C++20 wrapper for Firebird 5 database OO API with full support
 ## Features
 
 - ( **Full Firebird 5 Extended Types** - INT128, DECFLOAT(16/34), NUMERIC(38,x), TIMESTAMP WITH TIME ZONE
-- <¯ **Type-Safe** - Compile-time type checking with C++20 templates
-- =æ **Multiple Data Formats** - JSON, tuples, and strongly-typed objects
-- ¡ **High Performance** - Statement caching and batch operations
+- <ï¿½ **Type-Safe** - Compile-time type checking with C++20 templates
+- =ï¿½ **Multiple Data Formats** - JSON, tuples, and strongly-typed objects
+- ï¿½ **High Performance** - Statement caching and batch operations
 - =' **Developer Friendly** - Named parameters, RAII resource management
-- >ê **Well Tested** - Comprehensive test suite with 100+ tests
+- >ï¿½ **Well Tested** - Comprehensive test suite with 100+ tests
 
 ## Quick Start
 
@@ -145,13 +145,7 @@ stmt->execute(txn, std::make_tuple(1, big_number, precise, money));
 
 ## Documentation
 
-- [API Reference](https://sashok74.github.io/fbpp/) (coming soon)
-- [User Guide](doc/USER_GUIDE.md)
-- [Type System Guide](doc/firebird_types_guide.md)
-- [Extended Types](doc/EXTENDED_TYPES_ADAPTERS.md)
-- [Named Parameters](doc/NAMED_PARAMETERS.md)
-- [Statement Caching](doc/PREPARED_STATEMENT_CACHE_SPEC.md)
-- [Project Analysis](doc/PROJECT_ANALYSIS.md) - Detailed architecture and roadmap
+- [API Reference](https://sashok74.github.io/fbpp/) 
 
 ## Examples
 
@@ -188,8 +182,8 @@ cd build && ctest --output-on-failure
 | Platform | Status | Notes |
 |----------|--------|-------|
 | Linux (x64) |  Tested | Ubuntu 20.04+, Debian 11+ |
-| Windows (x64) | =á Should work | Not regularly tested |
-| macOS (x64/ARM) | =á Should work | Not regularly tested |
+| Windows (x64) | =ï¿½ Should work | Not regularly tested |
+| macOS (x64/ARM) | =ï¿½ Should work | Not regularly tested |
 
 ## Contributing
 
