@@ -56,8 +56,18 @@ target_include_directories(fbpp PUBLIC
 
 # Add Firebird include directories
 # On Ubuntu/Debian, Firebird headers are in /usr/include/firebird/
-# and FIREBIRD_INCLUDE_DIRS is set to /usr/include
-if(FIREBIRD_INCLUDE_DIRS)
+message(STATUS "FIREBIRD_INCLUDE_DIRS: ${FIREBIRD_INCLUDE_DIRS}")
+
+# CMake by default filters out /usr/include as it's a system directory
+# We need to work around this by checking if it's really /usr/include and handle it
+if(FIREBIRD_INCLUDE_DIRS STREQUAL "/usr/include")
+    # If Firebird is in /usr/include, headers are in /usr/include/firebird/
+    # We need to make sure this gets added. Since CMake filters /usr/include,
+    # we'll use target_compile_options to add it explicitly
+    target_compile_options(fbpp PUBLIC -I/usr/include)
+    message(STATUS "Added /usr/include explicitly via compile options")
+else()
+    # For non-standard locations, use normal include directories
     target_include_directories(fbpp PUBLIC ${FIREBIRD_INCLUDE_DIRS})
     message(STATUS "Added Firebird include directories: ${FIREBIRD_INCLUDE_DIRS}")
 endif()

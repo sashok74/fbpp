@@ -54,6 +54,12 @@ jobs:
           pip3 install conan
           conan --version
 
+          # Debug: Check where Firebird headers are installed
+          echo "Firebird header locations:"
+          find /usr/include -name "ibase.h" 2>/dev/null || echo "ibase.h not found in /usr/include"
+          find /usr/include -name "Interface.h" 2>/dev/null || echo "Interface.h not found in /usr/include"
+          dpkg -L firebird-dev | grep -E '\.(h|hpp)$' | head -20
+
       - name: Setup Conan profile
         run: |
           conan profile detect --force
