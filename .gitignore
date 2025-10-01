@@ -80,8 +80,8 @@ logs/
 *.cache
 cache/
 
-# Documentation review (work in progress)
-doc/review/
+# Documentation (local use only)
+doc/
 
 # Private/local files
 .env
