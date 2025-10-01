@@ -18,6 +18,8 @@ include(GoogleTest)
 
 include(cmake/FindFirebird.cmake)
 find_package(Firebird REQUIRED)
+message(STATUS "Firebird include dir: ${FIREBIRD_INCLUDE_DIRS}")
+message(STATUS "Firebird library: ${FIREBIRD_LIBRARIES}")
 
 # Add vendored libraries
 add_subdirectory(third_party/ttmath)
