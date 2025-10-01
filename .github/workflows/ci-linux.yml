@@ -52,9 +52,9 @@ jobs:
 
           # Install Firebird 5.x from official packages
           # Ubuntu 22.04 only has Firebird 3.0, but we need 5.x for extended types
-          wget https://github.com/FirebirdSQL/firebird/releases/download/v5.0.0/Firebird-5.0.0.1306-0.amd64.tar.gz
-          tar xzf Firebird-5.0.0.1306-0.amd64.tar.gz
-          cd Firebird-5.0.0.1306-0.amd64
+          wget https://github.com/FirebirdSQL/firebird/releases/download/v5.0.0/Firebird-5.0.0.1306-0-linux-x64.tar.gz
+          tar xzf Firebird-5.0.0.1306-0-linux-x64.tar.gz
+          cd Firebird-5.0.0.1306-0-linux-x64
           # Install only client libraries and headers (no server needed)
           sudo cp -r include/* /usr/include/
           sudo cp lib/libfbclient.so* /usr/lib/x86_64-linux-gnu/
