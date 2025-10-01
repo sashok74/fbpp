@@ -6,8 +6,7 @@
 #include "fbpp/core/type_adapter.hpp"
 #include "fbpp/core/exception.hpp"
 #include "fbpp_util/logging.h"
-#include <firebird/Interface.h>
-#include <firebird/impl/sqlda_pub.h>  // For SQL_TEXT, SQL_VARYING constants
+#include "fbpp/core/firebird_compat.hpp"
 #include <tuple>
 #include <cstring>
 #include <type_traits>

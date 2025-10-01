@@ -1,7 +1,7 @@
 #pragma once
 
 #include "fbpp/core/environment.hpp"
-#include <firebird/Interface.h>
+#include "fbpp/core/firebird_compat.hpp"
 #include <optional>
 #include <string>
 #include <vector>

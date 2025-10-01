@@ -1,6 +1,5 @@
 #pragma once
-#include <firebird/Interface.h>
-#include <firebird/iberror.h>
+#include "fbpp/core/firebird_compat.hpp"
 #include <cstddef>
 #include <cerrno>
 #include <sstream>

@@ -4,7 +4,7 @@
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/pack_utils.hpp"
 #include "fbpp/core/named_param_helper.hpp"
-#include <firebird/Interface.h>
+#include "fbpp/core/firebird_compat.hpp"
 #include <memory>
 #include <string>
 #include <vector>

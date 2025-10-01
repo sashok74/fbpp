@@ -3,7 +3,7 @@
 #include "fbpp/core/environment.hpp"
 #include "fbpp/core/message_metadata.hpp"
 #include "fbpp/core/pack_utils.hpp"
-#include <firebird/Interface.h>
+#include "fbpp/core/firebird_compat.hpp"
 #include <memory>
 #include <optional>
 #include <vector>

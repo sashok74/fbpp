@@ -4,7 +4,7 @@
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/statement.hpp"
 #include "fbpp/core/statement_cache.hpp"
-#include <firebird/Interface.h>
+#include "fbpp/core/firebird_compat.hpp"
 #include <memory>
 #include <string>
 

@@ -4,7 +4,7 @@
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/environment.hpp"
-#include <firebird/Interface.h>
+#include "fbpp/core/firebird_compat.hpp"
 #include <nlohmann/json.hpp>
 #include <cstring>
 #include <cstdio>

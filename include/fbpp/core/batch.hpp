@@ -1,6 +1,6 @@
 #pragma once
 
-#include <firebird/Interface.h>
+#include "fbpp/core/firebird_compat.hpp"
 #include <memory>
 #include <vector>
 #include <tuple>

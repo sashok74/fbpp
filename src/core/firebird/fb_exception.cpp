@@ -1,6 +1,6 @@
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/environment.hpp"
-#include <firebird/iberror.h>
+#include "fbpp/core/firebird_compat.hpp"
 #include <sstream>
 #include <cstring>
 #include <unordered_map>

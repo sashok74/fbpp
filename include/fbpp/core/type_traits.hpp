@@ -2,21 +2,7 @@
 
 #include "fbpp/core/extended_types.hpp"
 #include "fbpp/core/type_adapter.hpp"
-
-// On Ubuntu, ibase.h is in /usr/include/ directly
-// On custom installations, it's in /opt/firebird/include/firebird/
-// We include both forms - one will work depending on the system
-#if __has_include(<firebird/ibase.h>)
-#include <firebird/ibase.h>  // For /opt/firebird installations
-#else
-#include <ibase.h>  // For Ubuntu package installations
-#endif
-
-#if __has_include(<firebird/impl/sqlda_pub.h>)
-#include <firebird/impl/sqlda_pub.h>  // Официальные константы Firebird
-#elif __has_include(<impl/sqlda_pub.h>)
-#include <impl/sqlda_pub.h>
-#endif
+#include "fbpp/core/firebird_compat.hpp"  // Firebird header compatibility layer
 #include <cstdint>
 #include <string>
 #include <optional>

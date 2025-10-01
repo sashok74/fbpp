@@ -5,7 +5,7 @@
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/type_adapter.hpp"
-#include <firebird/Interface.h>
+#include "fbpp/core/firebird_compat.hpp"
 #include <tuple>
 #include <cstring>
 #include <optional>

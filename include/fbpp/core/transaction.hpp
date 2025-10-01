@@ -2,7 +2,7 @@
 
 #include "fbpp/core/environment.hpp"
 #include "fbpp/core/exception.hpp"
-#include <firebird/Interface.h>
+#include "fbpp/core/firebird_compat.hpp"
 #include <memory>
 #include <vector>
 

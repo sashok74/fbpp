@@ -1,9 +1,9 @@
 #pragma once
 
+#include "fbpp/core/firebird_compat.hpp"
 #include <exception>
 #include <string>
 #include <vector>
-#include <firebird/Interface.h>
 
 namespace fbpp {
 namespace core {
