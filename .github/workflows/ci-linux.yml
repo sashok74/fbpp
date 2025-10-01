@@ -64,7 +64,7 @@ jobs:
         run: |
           conan install . --output-folder=build --build=missing -s build_type=${{ matrix.build_type }}
           cd build
-          source generators/conanbuild.sh
+          source conanbuild.sh
           cmake .. \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
