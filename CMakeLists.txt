@@ -55,6 +55,11 @@ target_include_directories(fbpp PUBLIC
     ${FIREBIRD_INCLUDE_DIRS}
 )
 
+# Add Firebird include path for Ubuntu systems
+if(EXISTS "/usr/include/firebird")
+    target_include_directories(fbpp PUBLIC /usr/include/firebird)
+endif()
+
 target_link_libraries(fbpp
     PUBLIC
         ${FIREBIRD_LIBRARIES}
