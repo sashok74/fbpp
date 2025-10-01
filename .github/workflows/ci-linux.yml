@@ -45,20 +45,30 @@ jobs:
             ninja-build \
             ${{ matrix.compiler.cc }} \
             ${{ matrix.compiler.cxx }} \
-            firebird3.0-server \
-            firebird3.0-common \
-            libfbclient2 \
-            firebird-dev \
-            python3-pip
+            python3-pip \
+            wget \
+            libncurses5 \
+            libtommath1
+
+          # Install Firebird 5.x from official packages
+          # Ubuntu 22.04 only has Firebird 3.0, but we need 5.x for extended types
+          wget https://github.com/FirebirdSQL/firebird/releases/download/v5.0.0/Firebird-5.0.0.1306-0.amd64.tar.gz
+          tar xzf Firebird-5.0.0.1306-0.amd64.tar.gz
+          cd Firebird-5.0.0.1306-0.amd64
+          # Install only client libraries and headers (no server needed)
+          sudo cp -r include/* /usr/include/
+          sudo cp lib/libfbclient.so* /usr/lib/x86_64-linux-gnu/
+          sudo ldconfig
+          cd ..
 
           pip3 install conan
           conan --version
 
-          # Debug: Check where Firebird headers are installed
+          # Debug: Check Firebird installation
           echo "Firebird header locations:"
-          find /usr/include -name "ibase.h" 2>/dev/null || echo "ibase.h not found in /usr/include"
-          find /usr/include -name "Interface.h" 2>/dev/null || echo "Interface.h not found in /usr/include"
-          dpkg -L firebird-dev | grep -E '\.(h|hpp)$' | head -20
+          find /usr/include -name "ibase.h" 2>/dev/null || echo "ibase.h not found"
+          find /usr/include -name "Interface.h" 2>/dev/null || echo "Interface.h not found"
+          ls -la /usr/lib/x86_64-linux-gnu/libfbclient.so* || echo "libfbclient not found"
 
       - name: Setup Conan profile
         run: |
