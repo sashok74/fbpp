@@ -69,7 +69,7 @@ arena<N, alignment>::allocate(std::size_t n)
 {
     static_assert(ReqAlign <= alignment, "alignment is too small for this arena");
     //-assert(pointer_in_buffer(ptr_) && "short_alloc has outlived arena");
-    if(!pointer_in_buffer(ptr_)) throw std::bad_alloc("short_alloc has outlived arena");
+    if(!pointer_in_buffer(ptr_)) throw std::bad_alloc();
     auto const aligned_n = align_up(n);
     if (static_cast<decltype(aligned_n)>(buf_ + N - ptr_) >= aligned_n)
     {
@@ -89,7 +89,7 @@ void
 arena<N, alignment>::deallocate(char* p, std::size_t n) noexcept
 {
     //-assert(pointer_in_buffer(ptr_) && "short_alloc has outlived arena");
-    if(!pointer_in_buffer(ptr_)) throw std::bad_alloc("short_alloc has outlived arena");
+    if(!pointer_in_buffer(ptr_)) throw std::bad_alloc();
     if (pointer_in_buffer(p))
     {
         n = align_up(n);

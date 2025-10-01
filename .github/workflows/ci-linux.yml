@@ -45,6 +45,8 @@ jobs:
             ninja-build \
             ${{ matrix.compiler.cc }} \
             ${{ matrix.compiler.cxx }} \
+            firebird3.0-server \
+            firebird3.0-common \
             libfbclient2 \
             firebird-dev \
             python3-pip
