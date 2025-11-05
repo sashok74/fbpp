@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **fbpp** (Firebird Plus Plus) - Modern C++20 wrapper for Firebird 5 database OO API providing type-safe message packing/unpacking, RAII resource management, and comprehensive support for ALL Firebird extended types including INT128, DECFLOAT, and NUMERIC(38,x). Features include statement caching, named parameters, batch operations, and transaction templates.
 
 ## Critical Requirements
-
+- Для сбора контекста  для классов, фунций, методов проекта исользуй mcp cpp-sitter
 - **NO STUBS OR PLACEHOLDERS** - Every extended type must be fully implemented and tested against live Firebird 5 server
 - **ALL extended types support** is mandatory: INT128, DECFLOAT(16/34), NUMERIC(38,x), TIMESTAMP/TIME WITH TIME ZONE
 - **Live server testing** - Remote Firebird 5 at `firebird5:3050` with credentials `SYSDBA`/`planomer`
@@ -18,20 +18,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-### Building
+### Building and Testing
+
+**Primary build script** (recommended):
 ```bash
-# Full build with dependencies
+# Full clean build with Conan dependencies + tests
 ./build.sh RelWithDebInfo
 
-# Quick rebuild after changes
+# Other build types
+./build.sh Debug
+./build.sh Release
+```
+
+**Note**: `build.sh` performs:
+1. Clean build directory
+2. Install Conan dependencies
+3. Configure CMake with Conan toolchain
+4. Build entire project
+5. **Run all tests automatically**
+
+### Manual Building
+```bash
+# Quick rebuild after changes (without Conan reinstall)
 cd build && cmake --build . -j$(nproc)
 
-# Clean build
-rm -rf build CMakeUserPresets.json
-./build.sh RelWithDebInfo
-
 # Build specific target
-cd build && cmake --build . --target test_11_json_read
+cd build && cmake --build . --target test_statement
 ```
 
 ### Testing

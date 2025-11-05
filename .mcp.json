@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tree-sitter": {
+      "command": "/usr/local/bin/tree-sitter-mcp",
+      "args": ["--log-level", "info"]
+    }
+  }
+}
