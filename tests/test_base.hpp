@@ -5,7 +5,12 @@
 #include <string>
 #include <nlohmann/json.hpp>
 #include <fstream>
-#include <unistd.h>  // for getpid()
+
+#if defined(_WIN32)
+#include <process.h>  // for _getpid()
+#else
+#include <unistd.h>   // for getpid()
+#endif
 #include "fbpp/core/connection.hpp"
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/exception.hpp"
@@ -135,7 +140,7 @@ protected:
         
         auto pos = db_params_.database.rfind(".fdb");
         if (pos != std::string::npos) {
-            db_params_.database.insert(pos, "_" + std::to_string(getpid()) + 
+            db_params_.database.insert(pos, "_" + std::to_string(getCurrentProcessId()) + 
                                            "_" + std::to_string(test_counter_++));
         }
         
@@ -169,6 +174,14 @@ protected:
             ")");
     }
     
+    static long getCurrentProcessId() {
+#if defined(_WIN32)
+        return static_cast<long>(_getpid());
+#else
+        return static_cast<long>(getpid());
+#endif
+    }
+
     std::unique_ptr<Connection> connection_;
     ConnectionParams db_params_;
     static int test_counter_;

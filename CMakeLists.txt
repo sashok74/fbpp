@@ -82,7 +82,11 @@ target_link_libraries(fbpp
 )
 
 target_compile_features(fbpp PUBLIC cxx_std_20)
-target_compile_options(fbpp PRIVATE -Wno-unused-parameter)
+if(MSVC)
+    target_compile_options(fbpp PRIVATE /wd4100)
+else()
+    target_compile_options(fbpp PRIVATE -Wno-unused-parameter)
+endif()
 
 # Create alias for modern CMake usage
 add_library(fbpp::fbpp ALIAS fbpp)
