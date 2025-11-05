@@ -81,7 +81,7 @@ logs/
 cache/
 
 # Documentation (local use only)
-doc/
+# doc/
 
 # Private/local files
 .env
