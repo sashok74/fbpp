@@ -7,6 +7,7 @@ set(EXAMPLE_SOURCES
     02_json_operations.cpp       # JSON parameter binding and result fetching
     03_batch_simple.cpp         # Simple batch operations demonstration
     04_batch_advanced.cpp       # Advanced batch with TTMath/CppDecimal support
+    08_struct_fetch.cpp         # Struct-based fetch demonstration
     06_named_parameters.cpp     # Named parameters support demonstration
     07_cancel_operation.cpp     # Multi-threaded cancelOperation() API demonstration
     07_cancel_test_variants.cpp  # Test transaction memory leak
@@ -38,4 +39,3 @@ foreach(example_src ${EXAMPLE_SOURCES})
 
     target_compile_features(${example_name} PRIVATE cxx_std_20)
 endforeach()
-

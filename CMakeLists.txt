@@ -91,6 +91,19 @@ endif()
 # Create alias for modern CMake usage
 add_library(fbpp::fbpp ALIAS fbpp)
 
+# Query generator tool
+add_executable(query_generator
+    src/tools/query_generator.cpp
+)
+
+target_link_libraries(query_generator PRIVATE
+    fbpp
+    nlohmann_json::nlohmann_json
+    spdlog::spdlog
+)
+
+target_compile_features(query_generator PRIVATE cxx_std_20)
+
 
 # Исключаем примеры из сборки по умолчанию
 option(BUILD_EXAMPLES "Build examples" OFF)

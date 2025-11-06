@@ -201,6 +201,28 @@ target_link_libraries(test_struct_pack PRIVATE
 
 gtest_discover_tests(test_struct_pack)
 
+# Query generator test
+add_executable(test_query_generator
+    unit/test_query_generator.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_query_generator PRIVATE
+    fbpp
+    GTest::gtest
+    GTest::gtest_main
+    spdlog::spdlog
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+add_dependencies(test_query_generator query_generator)
+target_compile_definitions(test_query_generator PRIVATE BUILD_DIR=\"${CMAKE_BINARY_DIR}\")
+
+gtest_discover_tests(test_query_generator)
+
+gtest_discover_tests(test_struct_pack)
+
 # Cancel operation test
 add_executable(test_cancel_operation
     unit/test_cancel_operation.cpp

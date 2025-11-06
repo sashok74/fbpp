@@ -198,9 +198,17 @@ inline constexpr QueryRegistryEntry queryRegistry[] = {
 - Добавлен метод `Connection::describeQuery`, возвращающий метаданные входных и выходных параметров для произвольного SQL.
 - Написан интеграционный тест `test_query_metadata`, проверяющий запросы `SELECT` и `INSERT ... RETURNING`.
 - Подготовлен документ `struct_workflow.md` с описанием ожидаемого контракта для генератора и клиентского кода.
+- Реализованы `StructDescriptor`/`StructPacker`, универсальные `packStruct`/`unpackStruct`, а также публичный хелпер `fbpp::core::pack/unpack` для структур.
+- Добавлен модуль `query_executor` с `executeQuery`, `fetchOne`, `executeNonQuery`, показывающий целевой сценарий работы `QueryDescriptor`.
+- Написаны тесты `test_struct_pack` и дополнены `test_named_parameters`, демонстрирующие работу нового уровня API и корректное обращение с именованными параметрами.
+- В `test_query_metadata` добавлено создание таблицы `test_data`, чтобы `describeQuery` работал с реальной схемой.
 
 ## Следующие шаги
 1. **StructDescriptor/StructPacker**: реализовать генерацию и поддержку `StructDescriptor<T>` для C++ структур, а также шаблонные функции `pack/unpack` поверх `sql_value_codec`.
 2. **QueryDescriptor API**: создать шаблон `QueryDescriptor<QueryId>` с `Input`, `Output`, `StructDescriptor` и статической SQL-строкой.
 3. **Вспомогательные функции выполнения**: реализовать `execute<QueryDescriptor>()`, `fetchOne<QueryDescriptor>()`, `executeNonQuery<QueryDescriptor>()` и `executeBatch<QueryDescriptor>()`, использующие `StructPacker/Unpacker`.
 4. **Генератор договоров**: разработать утилиту (CLI) на клиентской стороне, которая использует `Connection::describeQuery` для построения `QueryDescriptor` и связанных структур, удостоверяясь, что SQL и типы синхронизированы.
+- **QueryDescriptor API**: зафиксировать контракт генератора (единый заголовок с `enum QueryId`, `template<QueryId> struct QueryDescriptor`, `Input/Output`), выделить инфраструктурный файл с `StructDescriptor`.
+- **Интеграция с Transaction/ResultSet**: расширить существующие шаблоны `Transaction::execute/openCursor`, чтобы они принимали `QueryDescriptor` и вызывали унифицированные хелперы.
+- **Генератор**: реализовать CLI, который принимает набор SQL-запросов, вызывает `describeQuery`, генерирует `Input/Output`, `StructDescriptor`, `QueryDescriptor`, а также JSON-описание.
+- **Тестовый комплект**: добавить сценарии на вставку/обновление/батч через `QueryDescriptor` и убедиться, что кодогенерация покрывает адаптеры, `std::optional`, BLOB и т.п.
