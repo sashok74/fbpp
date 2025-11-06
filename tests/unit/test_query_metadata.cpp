@@ -2,11 +2,29 @@
 #include "../test_base.hpp"
 #include "fbpp/core/connection.hpp"
 #include "fbpp/core/firebird_compat.hpp"
+#include "fbpp/core/exception.hpp"
 
 using namespace fbpp::core;
 using namespace fbpp::test;
 
-class QueryMetadataTest : public PersistentDatabaseTest {};
+class QueryMetadataTest : public PersistentDatabaseTest {
+protected:
+    static void SetUpTestSuite() {
+        PersistentDatabaseTest::SetUpTestSuite();
+        auto conn = std::make_unique<Connection>(db_params_);
+        try {
+            conn->ExecuteDDL(
+                "CREATE TABLE test_data ("
+                "    id INTEGER NOT NULL PRIMARY KEY,"
+                "    name VARCHAR(100),"
+                "    amount DOUBLE PRECISION,"
+                "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                ")");
+        } catch (const FirebirdException&) {
+            // Table already exists; ignore
+        }
+    }
+};
 
 TEST_F(QueryMetadataTest, DescribeSelectQuery) {
     const std::string sql =

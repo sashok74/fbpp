@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fbpp/core/detail/struct_pack.hpp"
 #include "fbpp/core/message_metadata.hpp"
 #include "fbpp/core/type_traits.hpp"
 #include "fbpp/core/tuple_packer.hpp"
@@ -7,6 +8,7 @@
 #include "fbpp/core/tuple_unpacker.hpp"
 #include "fbpp/core/json_unpacker.hpp"
 #include <nlohmann/json.hpp>
+#include <type_traits>
 
 namespace fbpp::core {
 
@@ -26,7 +28,10 @@ inline void pack(const T& data,
                  uint8_t* buffer,
                  const MessageMetadata* metadata,
                  Transaction* transaction = nullptr) {
-    if constexpr (is_tuple_v<T>) {
+    if constexpr (detail::has_struct_descriptor_v<T>) {
+        detail::packStruct(data, buffer, metadata, transaction);
+    }
+    else if constexpr (is_tuple_v<T>) {
         // For tuple - use TuplePacker with proper template arguments
         std::apply([&](auto&&... args) {
             TuplePacker<std::decay_t<decltype(args)>...> packer;
@@ -39,21 +44,24 @@ inline void pack(const T& data,
         packer.pack(data, buffer, metadata, transaction);
     }
     else {
-        static_assert(!sizeof(T), "Unsupported type for packing. Use tuple or json");
+        static_assert(detail::dependent_false_v<T>, "Unsupported type for packing. Use tuple, json, or struct with StructDescriptor");
     }
 }
 
-// Helper for extracting tuple types
+template<typename T, typename Enable = void>
+struct UnpackerHelper;
+
 template<typename T>
-struct UnpackerHelper {
-    static T unpack(const uint8_t*, const MessageMetadata*, Transaction*) {
-        static_assert(!sizeof(T), "Unsupported type for unpacking");
-        return T{};
+struct UnpackerHelper<T, std::enable_if_t<detail::has_struct_descriptor_v<T>>> {
+    static T unpack(const uint8_t* buffer,
+                    const MessageMetadata* metadata,
+                    Transaction* transaction) {
+        return detail::unpackStruct<T>(buffer, metadata, transaction);
     }
 };
 
 template<typename... Args>
-struct UnpackerHelper<std::tuple<Args...>> {
+struct UnpackerHelper<std::tuple<Args...>, void> {
     static std::tuple<Args...> unpack(const uint8_t* buffer,
                                       const MessageMetadata* metadata,
                                       Transaction* transaction) {
@@ -63,7 +71,7 @@ struct UnpackerHelper<std::tuple<Args...>> {
 };
 
 template<>
-struct UnpackerHelper<nlohmann::json> {
+struct UnpackerHelper<nlohmann::json, void> {
     static nlohmann::json unpack(const uint8_t* buffer,
                                  const MessageMetadata* metadata,
                                  Transaction* transaction) {
@@ -72,14 +80,17 @@ struct UnpackerHelper<nlohmann::json> {
     }
 };
 
-/**
- * @brief Universal unpack function - unpacks data from Firebird buffer
- * @tparam T Type to unpack to (tuple, json, etc)
- * @param buffer Input buffer with data
- * @param metadata Message metadata describing the buffer structure
- * @param transaction Transaction for BLOB operations (optional)
- * @return Unpacked data of type T
- */
+template<typename T>
+struct UnpackerHelper<T, std::enable_if_t<!detail::has_struct_descriptor_v<T> && !is_tuple_v<T> && !is_json_v<T>>> {
+    static T unpack(const uint8_t*,
+                    const MessageMetadata*,
+                    Transaction*) {
+        static_assert(detail::dependent_false_v<T>,
+                      "Unsupported type for unpacking. Use tuple, json, or struct with StructDescriptor");
+        return T{};
+    }
+};
+
 template<typename T>
 inline T unpack(const uint8_t* buffer,
                const MessageMetadata* metadata,

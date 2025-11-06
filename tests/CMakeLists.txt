@@ -184,6 +184,23 @@ target_link_libraries(test_query_metadata PRIVATE
 
 gtest_discover_tests(test_query_metadata)
 
+# Struct pack test
+add_executable(test_struct_pack
+    unit/test_struct_pack.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_struct_pack PRIVATE
+    fbpp
+    GTest::gtest
+    GTest::gtest_main
+    spdlog::spdlog
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_struct_pack)
+
 # Cancel operation test
 add_executable(test_cancel_operation
     unit/test_cancel_operation.cpp

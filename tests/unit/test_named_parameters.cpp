@@ -282,8 +282,13 @@ TEST_F(NamedParametersDbTest, StatementNamedParamGetters) {
     ASSERT_TRUE(connection_->isConnected());
 
     try {
-        // Create statement with named parameters
-        auto stmt = connection_->prepareStatement("SELECT * FROM rdb$database WHERE :param1 = :param1 AND :param2 = 1");
+        // Create statement with named parameters and explicit casts to give Firebird type information
+        const char* sql =
+            "SELECT * FROM rdb$database "
+            "WHERE CAST(:first AS VARCHAR(20)) = CAST(:first AS VARCHAR(20)) "
+            "AND CAST(:second AS INTEGER) = 1";
+
+        auto stmt = connection_->prepareStatement(sql);
 
         // Check that statement has named parameters
         EXPECT_TRUE(stmt->hasNamedParameters());
@@ -293,14 +298,17 @@ TEST_F(NamedParametersDbTest, StatementNamedParamGetters) {
         EXPECT_EQ(mapping.size(), 2);  // Two unique parameter names
 
         // Check param1 appears twice
-        auto it = mapping.find("param1");
+        auto it = mapping.find("first");
         EXPECT_NE(it, mapping.end());
         EXPECT_EQ(it->second.size(), 2);  // Used twice
 
         // Check param2 appears once
-        it = mapping.find("param2");
+        it = mapping.find("second");
         EXPECT_NE(it, mapping.end());
         EXPECT_EQ(it->second.size(), 1);  // Used once
+    } catch (const Firebird::FbException& fbex) {
+        fbpp::core::FirebirdException wrapped(fbex);
+        FAIL() << "Firebird FbException: " << wrapped.what();
     } catch (const std::exception& e) {
         FAIL() << "Unexpected exception: " << e.what();
     }

@@ -5,6 +5,7 @@
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/statement.hpp"
 #include "fbpp/core/statement_cache.hpp"
+#include "fbpp/core/named_param_parser.hpp"
 #include "fbpp/core/firebird_compat.hpp"
 #include <memory>
 #include <string>

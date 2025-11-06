@@ -1,6 +1,7 @@
 #include "fbpp/core/connection.hpp"
 #include "fbpp/core/statement.hpp"
 #include "fbpp/core/statement_cache.hpp"
+#include "fbpp/core/named_param_parser.hpp"
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/status_utils.hpp"
 #include "fbpp_util/logging.h"
@@ -491,27 +492,74 @@ Connection::QueryMetadataInfo Connection::describeQuery(const std::string& sql) 
     }
 
     auto logger = util::Logging::get();
-    auto statement = prepareStatement(sql, Statement::PREPARE_PREFETCH_ALL);
-    if (!statement) {
+    QueryMetadataInfo info;
+
+    auto parseResult = NamedParamParser::parse(sql);
+    const std::string& actualSql = parseResult.hasNamedParams ? parseResult.convertedSql : sql;
+
+    auto& env = Environment::getInstance();
+    Firebird::IStatus* raw = env.getMaster()->getStatus();
+    Firebird::ThrowStatusWrapper st(raw);
+
+    Firebird::IStatement* rawStmt = nullptr;
+    try {
+        rawStmt = attachment_->prepare(
+            &st,
+            nullptr,
+            0,
+            actualSql.c_str(),
+            3,
+            Statement::PREPARE_PREFETCH_ALL);
+    } catch (const Firebird::FbException& e) {
+        st.dispose();
+        throw FirebirdException(e);
+    }
+    st.dispose();
+
+    if (!rawStmt) {
         throw FirebirdException("Failed to prepare statement for metadata inspection");
     }
 
-    QueryMetadataInfo info;
-
-    if (auto inputMeta = statement->getInputMetadata()) {
-        unsigned count = inputMeta->getCount();
-        info.inputFields.reserve(count);
-        for (unsigned i = 0; i < count; ++i) {
-            info.inputFields.emplace_back(inputMeta->getField(i));
+    struct StatementGuard {
+        Connection* conn;
+        Firebird::IStatement* stmt;
+        ~StatementGuard() {
+            if (stmt) {
+                auto& st = conn->status();
+                try {
+                    stmt->free(&st);
+                    stmt->release();
+                } catch (...) {
+                    // ignore cleanup errors
+                }
+            }
         }
-    }
+    } guard{this, rawStmt};
 
-    if (auto outputMeta = statement->getOutputMetadata()) {
-        unsigned count = outputMeta->getCount();
-        info.outputFields.reserve(count);
-        for (unsigned i = 0; i < count; ++i) {
-            info.outputFields.emplace_back(outputMeta->getField(i));
+    try {
+        auto& stmtStatus = status();
+
+        Firebird::IMessageMetadata* inMetaRaw = rawStmt->getInputMetadata(&stmtStatus);
+        if (inMetaRaw) {
+            MessageMetadata inputWrapper(inMetaRaw);
+            unsigned count = inputWrapper.getCount();
+            info.inputFields.reserve(count);
+            for (unsigned i = 0; i < count; ++i) {
+                info.inputFields.emplace_back(inputWrapper.getField(i));
+            }
         }
+
+        Firebird::IMessageMetadata* outMetaRaw = rawStmt->getOutputMetadata(&stmtStatus);
+        if (outMetaRaw) {
+            MessageMetadata outputWrapper(outMetaRaw);
+            unsigned count = outputWrapper.getCount();
+            info.outputFields.reserve(count);
+            for (unsigned i = 0; i < count; ++i) {
+                info.outputFields.emplace_back(outputWrapper.getField(i));
+            }
+        }
+    } catch (const Firebird::FbException& e) {
+        throw FirebirdException(e);
     }
 
     if (logger) {
