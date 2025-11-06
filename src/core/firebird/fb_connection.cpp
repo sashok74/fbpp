@@ -485,6 +485,45 @@ std::shared_ptr<Statement> Connection::prepareStatement(const std::string& sql, 
     return statementCache_->get(this, sql, flags);
 }
 
+Connection::QueryMetadataInfo Connection::describeQuery(const std::string& sql) {
+    if (!attachment_) {
+        throw FirebirdException("Not connected to database");
+    }
+
+    auto logger = util::Logging::get();
+    auto statement = prepareStatement(sql, Statement::PREPARE_PREFETCH_ALL);
+    if (!statement) {
+        throw FirebirdException("Failed to prepare statement for metadata inspection");
+    }
+
+    QueryMetadataInfo info;
+
+    if (auto inputMeta = statement->getInputMetadata()) {
+        unsigned count = inputMeta->getCount();
+        info.inputFields.reserve(count);
+        for (unsigned i = 0; i < count; ++i) {
+            info.inputFields.emplace_back(inputMeta->getField(i));
+        }
+    }
+
+    if (auto outputMeta = statement->getOutputMetadata()) {
+        unsigned count = outputMeta->getCount();
+        info.outputFields.reserve(count);
+        for (unsigned i = 0; i < count; ++i) {
+            info.outputFields.emplace_back(outputMeta->getField(i));
+        }
+    }
+
+    if (logger) {
+        logger->trace("Describe query '{}' -> in: {}, out: {}",
+                      sql.substr(0, 100),
+                      info.inputFields.size(),
+                      info.outputFields.size());
+    }
+
+    return info;
+}
+
 void Connection::clearStatementCache() {
     if (statementCache_) {
         auto logger = util::Logging::get();

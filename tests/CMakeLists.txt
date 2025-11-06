@@ -167,6 +167,23 @@ target_link_libraries(test_named_parameters PRIVATE
 
 gtest_discover_tests(test_named_parameters)
 
+# Query metadata test
+add_executable(test_query_metadata
+    unit/test_query_metadata.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_query_metadata PRIVATE
+    fbpp
+    GTest::gtest
+    GTest::gtest_main
+    spdlog::spdlog
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_query_metadata)
+
 # Cancel operation test
 add_executable(test_cancel_operation
     unit/test_cancel_operation.cpp

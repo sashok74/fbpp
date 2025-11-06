@@ -83,6 +83,21 @@ cache/
 # Documentation (local use only)
 # doc/
 
+doc/CICD_INTEGRATION_PLAN.md
+doc/EXTENDED_TYPES_ADAPTERS.md
+doc/FIREBIRD_BUFFER_AND_TYPES.md
+doc/FIREBIRD_TYPES_HANDLING.md
+doc/GITHUB_PREPARATION_GUIDE.md
+doc/LIB_V1_ARCHITECTURE.md
+doc/NAMED_PARAMETERS.md
+doc/PREPARED_STATEMENT_CACHE_SPEC.md
+doc/PROJECT_ANALYSIS.md
+doc/TUPLE_PACKER_ARCHITECTURE.md
+doc/archive/
+doc/examples/
+doc/firebird_oo_api_doc.md
+doc/firebird_types_guide.md
+
 # Private/local files
 .env
 .env.local

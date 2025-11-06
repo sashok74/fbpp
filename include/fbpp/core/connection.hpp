@@ -1,12 +1,14 @@
 #pragma once
 
 #include "fbpp/core/environment.hpp"
+#include "fbpp/core/message_metadata.hpp"
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/statement.hpp"
 #include "fbpp/core/statement_cache.hpp"
 #include "fbpp/core/firebird_compat.hpp"
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace fbpp {
 namespace core {
@@ -84,6 +86,13 @@ public:
 
     // Get attachment
     Firebird::IAttachment* getAttachment() const { return attachment_; }
+
+    struct QueryMetadataInfo {
+        std::vector<FieldInfo> inputFields;
+        std::vector<FieldInfo> outputFields;
+    };
+
+    QueryMetadataInfo describeQuery(const std::string& sql);
 
     // Non-copyable
     Connection(const Connection&) = delete;
