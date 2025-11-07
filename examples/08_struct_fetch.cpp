@@ -3,7 +3,6 @@
 #include "fbpp/core/query_executor.hpp"
 #include "fbpp/core/struct_pack.hpp"
 #include "fbpp/core/timestamp_utils.hpp"
-#include "fbpp_util/logging.h"
 #include <nlohmann/json.hpp>
 
 #include <algorithm>

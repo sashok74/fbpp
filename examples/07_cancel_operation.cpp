@@ -22,7 +22,6 @@
 #include "fbpp/core/statement.hpp"
 #include "fbpp/core/result_set.hpp"
 #include "fbpp/core/exception.hpp"
-#include "fbpp_util/logging.h"
 #include <nlohmann/json.hpp>
 #include <firebird/Interface.h>
 
@@ -538,11 +537,6 @@ void test_4_non_blocking_cancel() {
 
 int main() {
     std::cout << "Starting 07_cancel_operation test suite...\n" << std::flush;
-    auto logger = util::Logging::get();
-    if (!logger) {
-        logger = spdlog::default_logger();
-        logger->set_level(spdlog::level::info);
-    }
 
     thread_print("\n");
     thread_print("╔══════════════════════════════════════════════════════════╗\n");

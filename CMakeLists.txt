@@ -10,7 +10,6 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/build)
 
 # Find Conan packages
 find_package(GTest REQUIRED)
-find_package(spdlog REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
 # Include GoogleTest module for gtest_discover_tests
@@ -42,7 +41,7 @@ add_library(fbpp STATIC
     src/core/firebird/fb_batch.cpp
 
     # Utilities
-    src/util/logging.cpp
+    src/util/trace.cpp
     src/util/config.cpp
     src/util/config_loader.cpp
 )
@@ -75,7 +74,6 @@ endif()
 target_link_libraries(fbpp
     PUBLIC
         ${FIREBIRD_LIBRARIES}
-        spdlog::spdlog
         nlohmann_json::nlohmann_json
         ttmath
         cppdecimal
@@ -99,7 +97,6 @@ add_executable(query_generator
 target_link_libraries(query_generator PRIVATE
     fbpp
     nlohmann_json::nlohmann_json
-    spdlog::spdlog
 )
 
 target_compile_features(query_generator PRIVATE cxx_std_20)

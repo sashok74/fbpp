@@ -4,8 +4,8 @@
 #include "fbpp/core/named_param_parser.hpp"
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/status_utils.hpp"
-#include "fbpp_util/logging.h"
 #include "fbpp_util/config.h"
+#include "fbpp_util/trace.h"
 #include <stdexcept>
 
 namespace fbpp {
@@ -15,10 +15,6 @@ Connection::Connection(const std::string& database)
     : env_(Environment::getInstance())
     , status_(env_.getMaster()->getStatus())
     , statusWrapper_(status_) {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Creating connection to database: {}", database);
-    }
     ConnectionParams params;
     params.database = database;
     connect(params);
@@ -28,30 +24,18 @@ Connection::Connection(const ConnectionParams& params)
     : env_(Environment::getInstance())
     , status_(env_.getMaster()->getStatus())
     , statusWrapper_(status_) {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Creating connection with params - database: {}, user: {}",
-                      params.database, params.user);
-    }
     connect(params);
 }
 
 Connection::~Connection() {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Destroying connection");
-    }
     disconnect();
     // Dispose our owned IStatus
     statusWrapper_.dispose();
 }
 
 void Connection::connect(const ConnectionParams& params) {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->info("Connecting to database: {}", params.database);
-    }
-
+    util::trace(util::TraceLevel::info, "Connection",
+                [&](auto& oss) { oss << "Connecting to " << params.database; });
     try {
         auto& st = status();
 
@@ -85,42 +69,35 @@ void Connection::connect(const ConnectionParams& params) {
         dpb->dispose();
 
         if (!attachment_) {
-            if (logger) {
-                logger->error("Failed to attach to database: {}", params.database);
-            }
+            util::trace(util::TraceLevel::error, "Connection",
+                        [&](auto& oss) { oss << "Failed to attach to " << params.database; });
             throw FirebirdException("Failed to attach to database: " + params.database);
         }
 
-        if (logger) {
-            logger->info("Successfully connected to database");
-        }
+        util::trace(util::TraceLevel::info, "Connection",
+                    [&](auto& oss) { oss << "Connected to " << params.database; });
     }
     catch (const Firebird::FbException& e) {
-        if (logger) {
-            logger->error("Connection failed with Firebird exception");
-        }
+        util::trace(util::TraceLevel::error, "Connection",
+                    [&](auto& oss) {
+                        oss << "Connection to " << params.database << " failed (Firebird exception)";
+                    });
         throw FirebirdException(e);
     }
 }
 
 void Connection::disconnect() {
-    auto logger = util::Logging::get();
     if (attachment_) {
-        if (logger) {
-            logger->debug("Disconnecting from database");
-        }
         try {
             auto& st = status();
             attachment_->detach(&st);
             attachment_->release();
-            if (logger) {
-                logger->info("Successfully disconnected from database");
-            }
+            util::trace(util::TraceLevel::info, "Connection",
+                        [](auto& oss) { oss << "Disconnected from database"; });
         }
         catch (...) {
-            if (logger) {
-                logger->warn("Error during disconnect (ignored)");
-            }
+            util::trace(util::TraceLevel::warn, "Connection",
+                        [](auto& oss) { oss << "Error while disconnecting (ignored)"; });
             // Ignore errors during disconnect
         }
         attachment_ = nullptr;
@@ -128,15 +105,12 @@ void Connection::disconnect() {
 }
 
 std::shared_ptr<Transaction> Connection::Execute(const std::string& sql) {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Executing SQL: {}", sql.substr(0, 100)); // Log first 100 chars
-    }
-
     if (!attachment_) {
-        if (logger) {
-            logger->error("Cannot execute SQL - not connected to database");
-        }
+        util::trace(util::TraceLevel::error, "Connection",
+                    [&](auto& oss) {
+                        oss << "Cannot execute SQL (not connected): "
+                            << sql.substr(0, 100);
+                    });
         throw FirebirdException("Not connected to database");
     }
 
@@ -155,9 +129,11 @@ std::shared_ptr<Transaction> Connection::Execute(const std::string& sql) {
 
         if (!stmt) {
             // Statement preparation failed
-            if (logger) {
-                logger->error("Failed to prepare SQL statement: {}", sql);
-            }
+            util::trace(util::TraceLevel::error, "Connection",
+                        [&](auto& oss) {
+                            oss << "Failed to prepare SQL statement: "
+                                << sql.substr(0, 100);
+                        });
             // Clean up transaction
             tra->rollback(&st);
             tra->release();
@@ -250,33 +226,29 @@ void Connection::cancelOperation(CancelOperation option) {
         throw FirebirdException("Cannot cancel operation: not connected");
     }
 
-    auto logger = util::Logging::get();
-    if (logger) {
-        const char* optionName = nullptr;
-        switch (option) {
-            case CancelOperation::DISABLE:
-                optionName = "DISABLE";
-                break;
-            case CancelOperation::ENABLE:
-                optionName = "ENABLE";
-                break;
-            case CancelOperation::RAISE:
-                optionName = "RAISE";
-                break;
-            case CancelOperation::ABORT:
-                optionName = "ABORT";
-                break;
-        }
-        logger->debug("Calling cancelOperation with option: {}", optionName);
+    const char* optionName = nullptr;
+    switch (option) {
+        case CancelOperation::DISABLE:
+            optionName = "DISABLE";
+            break;
+        case CancelOperation::ENABLE:
+            optionName = "ENABLE";
+            break;
+        case CancelOperation::RAISE:
+            optionName = "RAISE";
+            break;
+        case CancelOperation::ABORT:
+            optionName = "ABORT";
+            break;
     }
+    util::trace(util::TraceLevel::info, "Connection",
+                [&](auto& oss) {
+                    oss << "cancelOperation(" << (optionName ? optionName : "UNKNOWN") << ")";
+                });
 
     try {
         auto& st = status();
         attachment_->cancelOperation(&st, static_cast<int>(option));
-
-        if (logger) {
-            logger->debug("cancelOperation completed successfully");
-        }
     }
     catch (const Firebird::FbException& e) {
         throw FirebirdException(e);
@@ -466,18 +438,11 @@ std::shared_ptr<Statement> Connection::prepareStatement(const std::string& sql, 
 
     // Lazy initialization of cache
     if (!statementCache_) {
-        auto logger = util::Logging::get();
-
         // Get cache configuration
         StatementCache::CacheConfig cacheConfig;
         cacheConfig.enabled = util::Config::cache().enabled;
         cacheConfig.maxSize = util::Config::cache().maxStatements;
         cacheConfig.ttlMinutes = util::Config::cache().ttlMinutes;
-
-        if (logger) {
-            logger->debug("Initializing statement cache - enabled: {}, maxSize: {}, ttl: {} minutes",
-                          cacheConfig.enabled, cacheConfig.maxSize, cacheConfig.ttlMinutes);
-        }
 
         statementCache_ = std::make_unique<StatementCache>(cacheConfig);
     }
@@ -491,7 +456,6 @@ Connection::QueryMetadataInfo Connection::describeQuery(const std::string& sql) 
         throw FirebirdException("Not connected to database");
     }
 
-    auto logger = util::Logging::get();
     QueryMetadataInfo info;
 
     auto parseResult = NamedParamParser::parse(sql);
@@ -562,22 +526,11 @@ Connection::QueryMetadataInfo Connection::describeQuery(const std::string& sql) 
         throw FirebirdException(e);
     }
 
-    if (logger) {
-        logger->trace("Describe query '{}' -> in: {}, out: {}",
-                      sql.substr(0, 100),
-                      info.inputFields.size(),
-                      info.outputFields.size());
-    }
-
     return info;
 }
 
 void Connection::clearStatementCache() {
     if (statementCache_) {
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->debug("Clearing statement cache");
-        }
         statementCache_->clear();
     }
 }

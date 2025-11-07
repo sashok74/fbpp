@@ -5,7 +5,6 @@
 #include "fbpp/core/statement.hpp"
 #include "fbpp/core/transaction.hpp"
 #include "fbpp_util/config.h"
-#include "fbpp_util/logging.h"
 #include <thread>
 #include <chrono>
 
@@ -16,23 +15,11 @@ using namespace fbpp::test;
 class StatementCacheTest : public TempDatabaseTest {
 protected:
     void SetUp() override {
-        // Call base class SetUp - logging is now initialized from config
+        // Call base class SetUp - logging was previously initialized from config
         TempDatabaseTest::SetUp();
-
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->info("=== Starting test: {} ===",
-                        ::testing::UnitTest::GetInstance()->current_test_info()->name());
-        }
     }
 
     void TearDown() override {
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->info("=== Ending test: {} ===",
-                        ::testing::UnitTest::GetInstance()->current_test_info()->name());
-        }
-
         // Call base class TearDown
         TempDatabaseTest::TearDown();
     }

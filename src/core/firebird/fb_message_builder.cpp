@@ -1,6 +1,5 @@
 #include "fbpp/core/message_builder.hpp"
 #include "fbpp/core/exception.hpp"
-#include "fbpp_util/logging.h"
 #include <sstream>
 #include <algorithm>
 
@@ -25,11 +24,6 @@ MessageBuilder::MessageBuilder(unsigned field_count)
     }
     
     field_names_.reserve(field_count);
-    
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Created MessageBuilder for {} fields", field_count);
-    }
 }
 
 MessageBuilder::~MessageBuilder() {
@@ -73,12 +67,6 @@ MessageBuilder& MessageBuilder::operator=(MessageBuilder&& other) noexcept {
 }
 
 void MessageBuilder::addField(const std::string& name, int sql_type, unsigned length, int scale) {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("MessageBuilder::addField called - name: {}, sql_type: {}, length: {}, scale: {}", 
-                     name, sql_type, length, scale);
-    }
-    
     if (!builder_) {
         throw FirebirdException("MessageBuilder is not valid");
     }
@@ -89,10 +77,6 @@ void MessageBuilder::addField(const std::string& name, int sql_type, unsigned le
     
     unsigned index_to_use = current_index_;
     current_index_++;  // Increment before calling setField
-    
-    if (logger) {
-        logger->debug("Calling setField with index: {}", index_to_use);
-    }
     
     setField(index_to_use, name, sql_type, length, scale);
 }
@@ -105,12 +89,6 @@ void MessageBuilder::setField(unsigned index, const std::string& name, int sql_t
     checkIndex(index);
     
     auto& env = Environment::getInstance();
-    auto logger = util::Logging::get();
-    
-    if (logger) {
-        logger->debug("setField called with index={}, name={}, sql_type={}, length={}, scale={}", 
-                      index, name, sql_type, length, scale);
-    }
     
     // Convert name to uppercase for Firebird
     std::string upper_name = name;
@@ -122,14 +100,8 @@ void MessageBuilder::setField(unsigned index, const std::string& name, int sql_t
     // Try to set field name - this might not be supported by all Firebird versions
     try {
         builder_->setField(&st, index, upper_name.c_str());
-        if (logger) {
-            logger->debug("Successfully set field name: {}", upper_name);
-        }
     } catch (...) {
         // If setField fails, continue anyway - field names are optional
-        if (logger) {
-            logger->debug("setField not supported or failed - continuing without field name");
-        }
     }
     
     // Set field type - Firebird expects type + 1 for nullable fields
@@ -138,22 +110,11 @@ void MessageBuilder::setField(unsigned index, const std::string& name, int sql_t
     if (sql_type & 1) {
         // Already nullable (odd type), use as-is
         firebird_type = sql_type;
-        if (logger) {
-            logger->debug("sql_type={} is already nullable (odd), using as-is", sql_type);
-        }
     } else {
         // Make nullable by adding 1 (even -> odd)
         firebird_type = sql_type + 1;
-        if (logger) {
-            logger->debug("sql_type={} is not nullable (even), making nullable: firebird_type={}", 
-                          sql_type, firebird_type);
-        }
     }
-    
-    if (logger) {
-        logger->debug("About to call setType with index={}, firebird_type={}", index, firebird_type);
-    }
-    
+
     builder_->setType(&st, index, firebird_type);
     
     // Set field length
@@ -172,11 +133,6 @@ void MessageBuilder::setField(unsigned index, const std::string& name, int sql_t
     }
     field_names_[index] = upper_name;
     
-    if (logger) {
-        logger->debug("Set field[{}]: name={}, sql_type={}, firebird_type={}, length={}, scale={}", 
-                     index, upper_name, sql_type, firebird_type, length, scale);
-    }
-    
     // Don't update current_index_ here - let addField manage it
 }
 
@@ -194,11 +150,6 @@ std::unique_ptr<MessageMetadata> MessageBuilder::build() {
     Firebird::IMessageMetadata* metadata = builder_->getMetadata(&st);
     if (!metadata) {
         throw FirebirdException("Failed to build message metadata");
-    }
-    
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Built MessageMetadata with {} fields", current_index_);
     }
     
     // Wrap in our MessageMetadata class

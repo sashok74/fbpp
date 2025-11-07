@@ -6,7 +6,6 @@
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/statement.hpp"
 #include "fbpp/core/result_set.hpp"
-#include "fbpp_util/logging.h"
 #include <nlohmann/json.hpp>
 
 using namespace fbpp::core;
@@ -17,9 +16,6 @@ using json = nlohmann::json;
 class NamedParametersTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Initialize logging if needed
-        auto logger = util::Logging::get();
-        // Logger initialization is already done by library
     }
 
     void TearDown() override {
@@ -32,21 +28,9 @@ protected:
     void SetUp() override {
         // Call base class SetUp
         TempDatabaseTest::SetUp();
-
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->info("=== Starting test: {} ===",
-                        ::testing::UnitTest::GetInstance()->current_test_info()->name());
-        }
     }
 
     void TearDown() override {
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->info("=== Ending test: {} ===",
-                        ::testing::UnitTest::GetInstance()->current_test_info()->name());
-        }
-
         // Call base class TearDown
         TempDatabaseTest::TearDown();
     }

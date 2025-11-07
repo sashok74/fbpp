@@ -24,7 +24,6 @@
 #include <format>
 #endif
 #include <fbpp/fbpp_all.hpp>
-#include "fbpp_util/logging.h"
 #include <nlohmann/json.hpp>
 #include <ttmath/ttmath.h>
 #include <decimal>
@@ -58,17 +57,11 @@ void printInfo(const std::string& label, const std::string& value) {
 }
 
 int main() {
-    // Настройка логирования
-    auto logger = util::Logging::get();
-
     // Генератор уникальных значений для F_INTEGER
     auto generate_unique_integer = []() {
         static int counter = 1000000 + std::chrono::system_clock::now().time_since_epoch().count() % 1000000;
         return counter++;
     };
-    if (logger) {
-        logger->set_level(spdlog::level::info);
-    }
     
     printHeader("Firebird C++ Wrapper (fbpp) - Connection Example");
     

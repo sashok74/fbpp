@@ -3,7 +3,7 @@
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/environment.hpp"
 #include "fbpp/core/exception.hpp"
-#include "fbpp_util/logging.h"
+#include "fbpp_util/trace.h"
 #include <sstream>
 
 namespace fbpp::core {
@@ -62,12 +62,12 @@ BatchResult Batch::execute(Transaction* transaction) {
     if (!transaction || !transaction->isActive()) {
         throw FirebirdException("Valid active transaction required for batch execution");
     }
-    
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->info("Executing batch with {} messages", impl_->messageCount_);
-    }
-    
+
+    util::trace(util::TraceLevel::info, "Batch",
+                [&](auto& oss) {
+                    oss << "Executing batch with " << impl_->messageCount_ << " messages";
+                });
+
     BatchResult result;
     result.totalMessages = impl_->messageCount_;
     
@@ -104,15 +104,14 @@ BatchResult Batch::execute(Transaction* transaction) {
                     util->formatStatus(errorBuf, sizeof(errorBuf) - 1, errorStatus);
                     errorBuf[sizeof(errorBuf) - 1] = 0;
                     result.errors.push_back(std::string("Message ") + std::to_string(i) + ": " + errorBuf);
+
+                    util::trace(util::TraceLevel::error, "Batch",
+                                [&](auto& oss) {
+                                    oss << "Batch message " << i << " failed: " << errorBuf;
+                                });
                     
-                    if (logger) {
-                        logger->error("Batch message {} failed: {}", i, errorBuf);
-                    }
                 } else if (state >= 0) {
                     result.successCount++;
-                    if (logger) {
-                        logger->debug("Batch message {} succeeded, {} rows affected", i, state);
-                    }
                 } else {
                     // SUCCESS_NO_INFO
                     result.successCount++;
@@ -143,13 +142,17 @@ BatchResult Batch::execute(Transaction* transaction) {
         // Release batch after successful execution
         impl_->batch_->release();
         impl_->batch_ = nullptr;
-        
-        if (logger) {
-            logger->info("Batch execution complete: {} success, {} failed out of {} total",
-                        result.successCount, result.failedCount, result.totalMessages);
-        }
+
+        util::trace(util::TraceLevel::info, "Batch",
+                    [&](auto& oss) {
+                        oss << "Batch execution complete: success=" << result.successCount
+                            << " failed=" << result.failedCount
+                            << " total=" << result.totalMessages;
+                    });
         
     } catch (const Firebird::FbException& e) {
+        util::trace(util::TraceLevel::error, "Batch",
+                    [](auto& oss) { oss << "Batch execution failed (Firebird exception)"; });
         throw FirebirdException(e);
     }
     
@@ -166,11 +169,8 @@ void Batch::cancel() {
         impl_->batch_->release();
         impl_->batch_ = nullptr;
         impl_->messageCount_ = 0;
-        
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->debug("Batch cancelled");
-        }
+        util::trace(util::TraceLevel::info, "Batch",
+                    [](auto& oss) { oss << "Batch cancelled"; });
     } catch (const Firebird::FbException& e) {
         throw FirebirdException(e);
     }

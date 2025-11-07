@@ -5,7 +5,6 @@
 #include "fbpp/core/result_set.hpp"
 #include "fbpp/core/batch.hpp"
 #include "fbpp/core/exception.hpp"
-#include "fbpp_util/logging.h"
 #include <cstring>
 
 namespace fbpp {
@@ -16,14 +15,7 @@ Statement::Statement(Firebird::IStatement* stmt, Connection* connection)
       status_(env_.getMaster()->getStatus()),
       statusWrapper_(status_),
       statement_(stmt), connection_(connection) {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Creating statement");
-    }
     if (!statement_) {
-        if (logger) {
-            logger->error("Invalid statement pointer");
-        }
         throw FirebirdException("Invalid statement pointer");
     }
 }
@@ -86,21 +78,10 @@ unsigned Statement::execute(Transaction* transaction,
                            const void* inBuffer,
                            Firebird::IMessageMetadata* outMetadata,
                            void* outBuffer) {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Executing prepared statement");
-    }
-    
     if (!statement_) {
-        if (logger) {
-            logger->error("Statement is not prepared");
-        }
         throw FirebirdException("Statement is not prepared");
     }
     if (!transaction || !transaction->isActive()) {
-        if (logger) {
-            logger->error("Invalid or inactive transaction");
-        }
         throw FirebirdException("Invalid or inactive transaction");
     }
     
@@ -341,12 +322,6 @@ std::unique_ptr<Batch> Statement::createBatch(Transaction* transaction,
         throw FirebirdException("Valid active transaction required for batch creation");
     }
     
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Creating batch with recordCounts={}, continueOnError={}", 
-                     recordCounts, continueOnError);
-    }
-    
     try {
         // Get attachment through statement
         // For now we'll create batch through statement itself
@@ -382,10 +357,6 @@ std::unique_ptr<Batch> Statement::createBatch(Transaction* transaction,
         
         if (!fbBatch) {
             throw FirebirdException("Failed to create batch");
-        }
-        
-        if (logger) {
-            logger->debug("Batch created successfully");
         }
         
         // Create and return our Batch wrapper

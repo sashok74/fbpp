@@ -6,7 +6,6 @@
 #include "fbpp/core/statement_cache.hpp"
 #include "fbpp/core/result_set.hpp"
 #include "fbpp_util/config.h"
-#include "fbpp_util/logging.h"
 #include <thread>
 #include <chrono>
 

@@ -12,7 +12,6 @@
 #include <iostream>
 #include <memory>
 #include <fbpp/fbpp.hpp>
-#include "fbpp_util/logging.h"
 #include <fstream>
 #include <nlohmann/json.hpp>
 
@@ -26,12 +25,6 @@ void printHeader(const std::string& title) {
 }
 
 int main() {
-    // Настройка логирования
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->set_level(spdlog::level::info);
-    }
-
     printHeader("Test: prepareStatement with and without transaction");
 
     try {

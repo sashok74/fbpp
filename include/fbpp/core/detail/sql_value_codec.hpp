@@ -6,7 +6,7 @@
 #include "fbpp/core/extended_types.hpp"
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/firebird_compat.hpp"
-#include "fbpp_util/logging.h"
+#include "fbpp_util/trace.h"
 
 #include <algorithm>
 #include <array>
@@ -168,10 +168,12 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
                 size_t actualLen = value.length();
 
                 if (maxDataLength > 0 && actualLen > maxDataLength) {
-                    auto logger = util::Logging::get();
-                    if (logger) {
-                        logger->warn("String truncated from {} to {} bytes", actualLen, maxDataLength);
-                    }
+                    const size_t originalLen = actualLen;
+                    util::trace(util::TraceLevel::warn, "SqlValueCodec",
+                                [&](auto& oss) {
+                                    oss << "String truncated from " << originalLen
+                                        << " to " << maxDataLength << " bytes";
+                                });
                     actualLen = maxDataLength;
                 }
 
@@ -198,10 +200,12 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
             size_t actualLen = std::strlen(value);
 
             if (maxDataLength > 0 && actualLen > maxDataLength) {
-                auto logger = util::Logging::get();
-                if (logger) {
-                    logger->warn("C-string truncated from {} to {} bytes", actualLen, maxDataLength);
-                }
+                const size_t originalLen = actualLen;
+                util::trace(util::TraceLevel::warn, "SqlValueCodec",
+                            [&](auto& oss) {
+                                oss << "C-string truncated from " << originalLen
+                                    << " to " << maxDataLength << " bytes";
+                            });
                 actualLen = maxDataLength;
             }
 

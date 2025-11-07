@@ -5,7 +5,7 @@
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/message_metadata.hpp"
 #include "fbpp/core/named_param_parser.hpp"
-#include "fbpp_util/logging.h"
+#include "fbpp_util/trace.h"
 #include <sstream>
 #include <cctype>
 
@@ -13,12 +13,7 @@ namespace fbpp {
 namespace core {
 
 StatementCache::StatementCache(const CacheConfig& config)
-    : config_(config) {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Creating statement cache with max size: {}", config_.maxSize);
-    }
-}
+    : config_(config) {}
 
 StatementCache::~StatementCache() {
     clear();
@@ -65,7 +60,6 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
 
     std::lock_guard<std::mutex> lock(mutex_);
 
-    auto logger = util::Logging::get();
     // Use original SQL for cache key (with named parameters)
     std::string key = generateKey(sql, flags);
 
@@ -74,9 +68,6 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
     if (it != cache_.end()) {
         // Cache hit
         stats_.hitCount++;
-        if (logger) {
-            logger->trace("Cache hit for query: {}", sql.substr(0, 50));
-        }
 
         // Update LRU position
         touchEntry(key);
@@ -91,9 +82,6 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
 
     // Cache miss
     stats_.missCount++;
-    if (logger) {
-        logger->trace("Cache miss for query: {}", sql.substr(0, 50));
-    }
 
     // Check if cache is full
     if (cache_.size() >= config_.maxSize) {
@@ -116,10 +104,12 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
         &st, nullptr, 0, actualSql.c_str(), 3, flags);
 
     if (!fbStmt) {
+        util::trace(util::TraceLevel::error, "StatementCache",
+                    [&](auto& oss) {
+                        oss << "Failed to prepare statement: "
+                            << actualSql.substr(0, 50);
+                    });
         st.dispose();
-        if (logger) {
-            logger->error("Failed to prepare statement: {}", actualSql.substr(0, 50));
-        }
         return nullptr;
     }
 
@@ -129,9 +119,6 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
     // Set named parameter mapping if any
     if (parseResult.hasNamedParams) {
         stmt->setNamedParamMapping(parseResult.nameToPositions, true);
-        if (logger) {
-            logger->trace("Statement uses {} named parameters", parseResult.nameToPositions.size());
-        }
     }
 
     // Create cache entry
@@ -161,11 +148,6 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
 void StatementCache::clear() {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    auto logger = util::Logging::get();
-    if (logger && !cache_.empty()) {
-        logger->debug("Clearing statement cache with {} entries", cache_.size());
-    }
-
     // Statements will be freed automatically via unique_ptr destructors
     cache_.clear();
     lruList_.clear();
@@ -192,11 +174,6 @@ bool StatementCache::remove(const std::string& sql, unsigned flags) {
         cache_.erase(it);
 
         stats_.cacheSize = cache_.size();
-
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->trace("Removed statement from cache: {}", sql.substr(0, 50));
-        }
 
         return true;
     }
@@ -227,11 +204,8 @@ void StatementCache::setEnabled(bool enabled) {
     }
 
     config_.enabled = enabled;
-
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->info("Statement cache {}", enabled ? "enabled" : "disabled");
-    }
+    util::trace(util::TraceLevel::info, "StatementCache",
+                [&](auto& oss) { oss << "Cache " << (enabled ? "enabled" : "disabled"); });
 }
 
 void StatementCache::setMaxSize(size_t maxSize) {
@@ -244,10 +218,8 @@ void StatementCache::setMaxSize(size_t maxSize) {
         evictLRU();
     }
 
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->info("Statement cache max size set to {}", maxSize);
-    }
+    util::trace(util::TraceLevel::info, "StatementCache",
+                [&](auto& oss) { oss << "Cache max size set to " << maxSize; });
 }
 
 size_t StatementCache::removeExpired() {
@@ -285,11 +257,6 @@ size_t StatementCache::removeExpired() {
     }
 
     stats_.cacheSize = cache_.size();
-
-    auto logger = util::Logging::get();
-    if (logger && removed > 0) {
-        logger->debug("Removed {} expired statements from cache", removed);
-    }
 
     return removed;
 }
@@ -415,15 +382,6 @@ void StatementCache::evictLRU() {
     // Get least recently used key (back of list)
     std::string key = lruList_.back();
 
-    auto logger = util::Logging::get();
-    if (logger) {
-        auto it = cache_.find(key);
-        if (it != cache_.end()) {
-            logger->trace("Evicting LRU statement: {}",
-                         it->second->sql.substr(0, 50));
-        }
-    }
-
     // Remove from LRU tracking
     lruList_.pop_back();
     lruMap_.erase(key);
@@ -439,8 +397,6 @@ void StatementCache::extractMetadata(Statement* statement, CachedStatement& entr
     if (!statement) {
         return;
     }
-
-    auto logger = util::Logging::get();
 
     // Extract input metadata
     try {
@@ -461,14 +417,9 @@ void StatementCache::extractMetadata(Statement* statement, CachedStatement& entr
                 entry.inputParams.push_back(param);
             }
 
-            if (logger) {
-                logger->trace("Extracted {} input parameters", count);
-            }
         }
-    } catch (const std::exception& e) {
-        if (logger) {
-            logger->warn("Failed to extract input metadata: {}", e.what());
-        }
+    } catch (const std::exception&) {
+        // Ignore metadata extraction failures
     }
 
     // Extract output metadata
@@ -493,14 +444,9 @@ void StatementCache::extractMetadata(Statement* statement, CachedStatement& entr
                 entry.outputParams.push_back(param);
             }
 
-            if (logger) {
-                logger->trace("Extracted {} output parameters", count);
-            }
         }
-    } catch (const std::exception& e) {
-        if (logger) {
-            logger->warn("Failed to extract output metadata: {}", e.what());
-        }
+    } catch (const std::exception&) {
+        // Ignore metadata extraction failures
     }
 }
 

@@ -34,7 +34,6 @@ target_link_libraries(test_core_wrapper PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -51,7 +50,6 @@ target_link_libraries(test_statement PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -68,7 +66,6 @@ target_link_libraries(test_firebird_exception PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -85,7 +82,6 @@ target_link_libraries(test_statement_cache PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -102,7 +98,6 @@ target_link_libraries(test_cached_statements PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -119,7 +114,6 @@ target_link_libraries(test_adapted_type_traits PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -135,7 +129,6 @@ target_link_libraries(test_ttmath_int128 PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -151,7 +144,6 @@ target_link_libraries(test_ttmath_scale PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -167,7 +159,6 @@ target_link_libraries(test_cppdecimal_decfloat PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -184,7 +175,6 @@ target_link_libraries(test_named_parameters PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -201,7 +191,6 @@ target_link_libraries(test_query_metadata PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -218,7 +207,6 @@ target_link_libraries(test_struct_pack PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -235,7 +223,6 @@ target_link_libraries(test_query_generator PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -254,7 +241,6 @@ target_link_libraries(test_query_generator_integration PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -277,7 +263,6 @@ target_link_libraries(test_cancel_operation PRIVATE
     fbpp
     GTest::gtest
     GTest::gtest_main
-    spdlog::spdlog
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
 )
@@ -286,7 +271,7 @@ gtest_discover_tests(test_cancel_operation)
 
 # Basic infrastructure tests
 set(BASIC_TEST_SOURCES
-    unit/test_logging.cpp
+    unit/test_trace.cpp
     unit/test_config.cpp
     unit/test_fbclient_symbols.cpp
 )
@@ -299,7 +284,6 @@ foreach(test_source ${BASIC_TEST_SOURCES})
         fbpp
         GTest::gtest
         GTest::gtest_main
-        spdlog::spdlog
         nlohmann_json::nlohmann_json
         ${FIREBIRD_LIBRARIES}
     )

@@ -5,7 +5,6 @@
 #include "fbpp/core/type_traits.hpp"
 #include "fbpp/core/type_adapter.hpp"
 #include "fbpp/core/exception.hpp"
-#include "fbpp_util/logging.h"
 #include "fbpp/core/firebird_compat.hpp"
 #include "fbpp/core/detail/sql_value_codec.hpp"
 #include <tuple>
@@ -59,11 +58,6 @@ struct TuplePackHelper {
         
         // Generate field name
         std::string field_name = "PARAM_" + std::to_string(index);
-        
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->debug("About to add field {} for type index {}", field_name, idx);
-        }
         
         try {
             // Add field based on type

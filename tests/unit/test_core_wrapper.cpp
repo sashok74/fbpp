@@ -5,7 +5,6 @@
 #include "fbpp/core/connection.hpp"
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/exception.hpp"
-#include "fbpp_util/logging.h"
 
 using namespace fbpp::core;
 using namespace fbpp::test;
@@ -13,23 +12,11 @@ using namespace fbpp::test;
 class CoreWrapperTest : public TempDatabaseTest {
 protected:
     void SetUp() override {
-        // Call base class SetUp - logging is now initialized from config
+        // Call base class SetUp - logging was initialized previously
         TempDatabaseTest::SetUp();
-        
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->info("=== Starting test: {} ===", 
-                        ::testing::UnitTest::GetInstance()->current_test_info()->name());
-        }
     }
     
     void TearDown() override {
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->info("=== Ending test: {} ===", 
-                        ::testing::UnitTest::GetInstance()->current_test_info()->name());
-        }
-        
         // Call base class TearDown
         TempDatabaseTest::TearDown();
     }

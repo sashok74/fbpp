@@ -4,7 +4,7 @@
 #include "fbpp/core/result_set.hpp"
 #include "fbpp/core/batch.hpp"
 #include "fbpp/core/exception.hpp"
-#include "fbpp_util/logging.h"
+#include "fbpp_util/trace.h"
 #include <cstring>
 
 namespace fbpp {
@@ -17,14 +17,7 @@ Transaction::Transaction(Connection* connection, Firebird::ITransaction* transac
     , status_(env_.getMaster()->getStatus())
     , statusWrapper_(status_)
     , active_(true) {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Creating transaction");
-    }
     if (!transaction_) {
-        if (logger) {
-            logger->error("Invalid transaction pointer");
-        }
         throw FirebirdException("Invalid transaction pointer");
     }
 }
@@ -32,10 +25,10 @@ Transaction::Transaction(Connection* connection, Firebird::ITransaction* transac
 Transaction::~Transaction() {
     // Auto-rollback if transaction is still active
     if (active_ && transaction_) {
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->warn("Transaction being destroyed while still active - auto-rollback");
-        }
+        util::trace(util::TraceLevel::warn, "Transaction",
+                    [](auto& oss) {
+                        oss << "Transaction destroyed while still active; rolling back";
+                    });
         try {
             Rollback();
         }
@@ -82,65 +75,49 @@ Transaction& Transaction::operator=(Transaction&& other) noexcept {
 }
 
 void Transaction::Commit() {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Committing transaction");
-    }
-    
     if (!active_ || !transaction_) {
-        if (logger) {
-            logger->error("Cannot commit - transaction is not active");
-        }
+        util::trace(util::TraceLevel::error, "Transaction",
+                    [](auto& oss) { oss << "Commit requested on inactive transaction"; });
         throw FirebirdException("Transaction is not active");
     }
-    
+
     try {
         auto& st = status();
-        
+
         transaction_->commit(&st);
         transaction_ = nullptr;
         active_ = false;
-        
-        if (logger) {
-            logger->info("Transaction committed successfully");
-        }
+
+        util::trace(util::TraceLevel::info, "Transaction",
+                    [](auto& oss) { oss << "Transaction committed"; });
     }
     catch (const Firebird::FbException& e) {
-        if (logger) {
-            logger->error("Failed to commit transaction");
-        }
+        util::trace(util::TraceLevel::error, "Transaction",
+                    [](auto& oss) { oss << "Commit failed (Firebird exception)"; });
         throw FirebirdException(e);
     }
 }
 
 void Transaction::Rollback() {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Rolling back transaction");
-    }
-    
     if (!active_ || !transaction_) {
-        if (logger) {
-            logger->error("Cannot rollback - transaction is not active");
-        }
+        util::trace(util::TraceLevel::error, "Transaction",
+                    [](auto& oss) { oss << "Rollback requested on inactive transaction"; });
         throw FirebirdException("Transaction is not active");
     }
-    
+
     try {
         auto& st = status();
-        
+
         transaction_->rollback(&st);
         transaction_ = nullptr;
         active_ = false;
-        
-        if (logger) {
-            logger->info("Transaction rolled back successfully");
-        }
+
+        util::trace(util::TraceLevel::info, "Transaction",
+                    [](auto& oss) { oss << "Transaction rolled back"; });
     }
     catch (const Firebird::FbException& e) {
-        if (logger) {
-            logger->error("Failed to rollback transaction");
-        }
+        util::trace(util::TraceLevel::error, "Transaction",
+                    [](auto& oss) { oss << "Rollback failed (Firebird exception)"; });
         throw FirebirdException(e);
     }
 }
@@ -182,27 +159,19 @@ bool Transaction::isActive() const {
 }
 
 std::vector<uint8_t> Transaction::loadBlob(ISC_QUAD* blobId) {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Loading BLOB");
-    }
-    
     if (!active_ || !transaction_) {
         throw FirebirdException("Transaction is not active");
     }
-    
+
     if (!blobId) {
         throw FirebirdException("Invalid BLOB ID");
     }
-    
+
     // Check for NULL BLOB (all zeros)
     if (blobId->gds_quad_high == 0 && blobId->gds_quad_low == 0) {
-        if (logger) {
-            logger->debug("BLOB ID is NULL, returning empty data");
-        }
         return std::vector<uint8_t>();
     }
-    
+
     try {
         auto& st = status();
         auto attachment = connection_->getAttachment();
@@ -241,30 +210,20 @@ std::vector<uint8_t> Transaction::loadBlob(ISC_QUAD* blobId) {
         blob->close(&st);
         blob->release();
         
-        if (logger) {
-            logger->debug("BLOB loaded successfully, size: {} bytes", data.size());
-        }
-        
         return data;
     }
     catch (const Firebird::FbException& e) {
-        if (logger) {
-            logger->error("Failed to load BLOB");
-        }
+        util::trace(util::TraceLevel::error, "Transaction",
+                    [](auto& oss) { oss << "Failed to load BLOB (Firebird exception)"; });
         throw FirebirdException(e);
     }
 }
 
 ISC_QUAD Transaction::createBlob(const std::vector<uint8_t>& data) {
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Creating BLOB with {} bytes", data.size());
-    }
-    
     if (!active_ || !transaction_) {
         throw FirebirdException("Transaction is not active");
     }
-    
+
     try {
         auto& st = status();
         auto attachment = connection_->getAttachment();
@@ -292,17 +251,11 @@ ISC_QUAD Transaction::createBlob(const std::vector<uint8_t>& data) {
         blob->close(&st);
         blob->release();
         
-        if (logger) {
-            logger->debug("BLOB created successfully, ID: {}/{}", 
-                         blobId.gds_quad_high, blobId.gds_quad_low);
-        }
-        
         return blobId;
     }
     catch (const Firebird::FbException& e) {
-        if (logger) {
-            logger->error("Failed to create BLOB");
-        }
+        util::trace(util::TraceLevel::error, "Transaction",
+                    [](auto& oss) { oss << "Failed to create BLOB (Firebird exception)"; });
         throw FirebirdException(e);
     }
 }
@@ -355,12 +308,6 @@ std::unique_ptr<Batch> Transaction::createBatch(const std::unique_ptr<Statement>
         throw FirebirdException("Transaction is not active");
     }
     
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Creating batch with recordCounts={}, continueOnError={}", 
-                     recordCounts, continueOnError);
-    }
-    
     // Delegate to Statement's createBatch method
     return statement->createBatch(this, recordCounts, continueOnError);
 }
@@ -410,12 +357,6 @@ std::unique_ptr<Batch> Transaction::createBatch(const std::shared_ptr<Statement>
 
     if (!isActive()) {
         throw FirebirdException("Transaction is not active");
-    }
-
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->debug("Creating batch with cached statement, recordCounts={}, continueOnError={}",
-                     recordCounts, continueOnError);
     }
 
     // Delegate to Statement's createBatch method

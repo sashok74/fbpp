@@ -2,7 +2,6 @@
 #include "../test_base.hpp"
 #include "fbpp/core/connection.hpp"
 #include "fbpp/core/exception.hpp"
-#include "fbpp_util/logging.h"
 
 using namespace fbpp::core;
 using namespace fbpp::test;
@@ -13,20 +12,9 @@ protected:
         // Call base class SetUp
         TempDatabaseTest::SetUp();
 
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->info("=== Starting test: {} ===",
-                        ::testing::UnitTest::GetInstance()->current_test_info()->name());
-        }
     }
 
     void TearDown() override {
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->info("=== Ending test: {} ===",
-                        ::testing::UnitTest::GetInstance()->current_test_info()->name());
-        }
-
         // Call base class TearDown
         TempDatabaseTest::TearDown();
     }
@@ -67,13 +55,8 @@ TEST_F(CancelOperationTest, CancelRaiseOperation) {
     // This is expected behavior from Firebird
     try {
         connection_->cancelOperation(CancelOperation::RAISE);
-        // If no exception, that's also acceptable
-    } catch (const FirebirdException& e) {
-        // Expected - "nothing to cancel"
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->info("Expected exception when nothing to cancel: {}", e.what());
-        }
+    } catch (const FirebirdException&) {
+        // Expected when there is nothing to cancel
     }
 
     // Connection should still be valid
@@ -90,15 +73,8 @@ TEST_F(CancelOperationTest, CancelAbortOperation) {
         connection_->cancelOperation(CancelOperation::ABORT);
     });
 
-    // Connection might be broken after abort, check status
-    // Note: The behavior after ABORT may vary depending on what was happening
-    // at the time. The connection might still be valid or might be broken.
-    auto logger = util::Logging::get();
-    if (logger) {
-        bool still_connected = connection_->isConnected();
-        logger->info("Connection status after ABORT: {}",
-                    still_connected ? "connected" : "disconnected");
-    }
+    // Connection might be broken after abort; verify state depends on server.
+    (void)connection_->isConnected();
 }
 
 // Test cancel operation on disconnected connection

@@ -30,7 +30,6 @@ foreach(example_src ${EXAMPLE_SOURCES})
     target_link_libraries(${example_name} PRIVATE
         fbpp
         ${FIREBIRD_LIBRARIES}
-        spdlog::spdlog
         nlohmann_json::nlohmann_json
         ttmath
         cppdecimal

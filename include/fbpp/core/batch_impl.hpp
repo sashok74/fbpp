@@ -4,7 +4,6 @@
 #include "fbpp/core/pack_utils.hpp"  // Use universal pack/unpack functions
 #include "fbpp/core/message_metadata.hpp"
 #include "fbpp/core/exception.hpp"
-#include "fbpp_util/logging.h"
 #include <nlohmann/json.hpp>
 #include <cstring>
 
@@ -53,11 +52,6 @@ void Batch::add(const std::tuple<Args...>& params) {
     try {
         impl_->batch_->add(&impl_->status(), 1, impl_->buffer_.data());
         impl_->messageCount_++;
-        
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->debug("Added message {} to batch", impl_->messageCount_);
-        }
     } catch (const Firebird::FbException& e) {
         throw FirebirdException(e);
     }
@@ -99,12 +93,6 @@ void Batch::addMany(const std::vector<std::tuple<Args...>>& paramsList) {
                           static_cast<unsigned>(paramsList.size()), 
                           streamBuffer.data());
         impl_->messageCount_ += paramsList.size();
-        
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->debug("Added {} messages to batch (total: {})", 
-                         paramsList.size(), impl_->messageCount_);
-        }
     } catch (const Firebird::FbException& e) {
         throw FirebirdException(e);
     }
@@ -132,11 +120,6 @@ inline void Batch::add(const nlohmann::json& params) {
     try {
         impl_->batch_->add(&impl_->status(), 1, impl_->buffer_.data());
         impl_->messageCount_++;
-        
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->debug("Added JSON message {} to batch", impl_->messageCount_);
-        }
     } catch (const Firebird::FbException& e) {
         throw FirebirdException(e);
     }
@@ -177,12 +160,6 @@ inline void Batch::addMany(const std::vector<nlohmann::json>& paramsList) {
                           static_cast<unsigned>(paramsList.size()), 
                           streamBuffer.data());
         impl_->messageCount_ += paramsList.size();
-        
-        auto logger = util::Logging::get();
-        if (logger) {
-            logger->debug("Added {} JSON messages to batch (total: {})", 
-                         paramsList.size(), impl_->messageCount_);
-        }
     } catch (const Firebird::FbException& e) {
         throw FirebirdException(e);
     }

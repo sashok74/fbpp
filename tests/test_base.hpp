@@ -14,7 +14,6 @@
 #include "fbpp/core/connection.hpp"
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/exception.hpp"
-#include "fbpp_util/logging.h"
 
 namespace fbpp {
 namespace test {
@@ -60,22 +59,8 @@ protected:
         return params;
     }
     
-    static void initLoggingFromConfig(const json& config) {
-        // Initialize logging from config if it exists
-        if (config.contains("logging")) {
-            auto logging_config = config["logging"];
-            std::string level = logging_config.value("level", "info");
-            bool console = logging_config.value("console", true);
-            bool file = logging_config.value("file", false);
-            std::string file_path = logging_config.value("file_path", "logs/test.log");
-            size_t max_size_mb = logging_config.value("rotate_max_size_mb", 5);
-            size_t max_files = logging_config.value("rotate_max_files", 3);
-            
-            util::Logging::init(level, console, file, file_path, max_size_mb, max_files);
-        } else {
-            // Default logging if no config
-            util::Logging::init("info", true, false);
-        }
+    static void initLoggingFromConfig(const json&) {
+        // Logging subsystem removed; trace observer can be configured separately.
     }
 };
 

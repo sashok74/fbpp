@@ -9,7 +9,6 @@
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/statement.hpp"
 #include "fbpp/core/result_set.hpp"
-#include "fbpp_util/logging.h"
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <iomanip>
@@ -31,12 +30,6 @@ void printInfo(const std::string& label, const std::string& value) {
 
 int main() {
     try {
-        // Initialize logging
-        auto logger = util::Logging::get();
-        if (!logger) {
-            logger = spdlog::default_logger();
-        }
-
         printHeader("Named Parameters Example with TABLE_TEST_1");
 
         // Load configuration
@@ -326,7 +319,7 @@ int main() {
 
         // Commit transaction
         transaction->Commit();
-        logger->info("Transaction committed");
+        std::cout << "Transaction committed\n";
 
         printHeader("✅ EXAMPLE COMPLETED SUCCESSFULLY");
 

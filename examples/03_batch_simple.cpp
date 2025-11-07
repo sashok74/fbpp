@@ -20,7 +20,6 @@
 #include <tuple>
 #include <optional>
 #include <fbpp/fbpp_all.hpp>
-#include "fbpp_util/logging.h"
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -38,12 +37,6 @@ void printInfo(const std::string& label, const std::string& value) {
 }
 
 int main() {
-    // Настройка логирования
-    auto logger = util::Logging::get();
-    if (logger) {
-        logger->set_level(spdlog::level::info);
-    }
-
     printHeader("Firebird Batch Operations with Tuple - Simple Version");
 
     try {
