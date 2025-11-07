@@ -2,6 +2,27 @@
 #include <fbpp_util/config.h>
 #include <fstream>
 #include <cstdlib>
+#include <filesystem>
+
+namespace {
+
+void setEnvVar(const char* key, const char* value) {
+#ifdef _WIN32
+    _putenv_s(key, value);
+#else
+    setenv(key, value, 1);
+#endif
+}
+
+void unsetEnvVar(const char* key) {
+#ifdef _WIN32
+    _putenv_s(key, "");
+#else
+    unsetenv(key);
+#endif
+}
+
+} // namespace
 
 class ConfigTest : public ::testing::Test {
 protected:
@@ -60,9 +81,9 @@ TEST_F(ConfigTest, LoadFromJson) {
 }
 
 TEST_F(ConfigTest, EnvOverridesJson) {
-    setenv("FBLAB_DB_USER", "envuser", 1);
-    setenv("FBLAB_DB_PATH", "/env/path.fdb", 1);
-    setenv("FBLAB_LOG_LEVEL", "info", 1);
+    setEnvVar("FBLAB_DB_USER", "envuser");
+    setEnvVar("FBLAB_DB_PATH", "/env/path.fdb");
+    setEnvVar("FBLAB_LOG_LEVEL", "info");
     
     ASSERT_TRUE(util::Config::load("test_config.json"));
     
@@ -74,7 +95,7 @@ TEST_F(ConfigTest, EnvOverridesJson) {
     EXPECT_EQ(util::Config::db().server, "testserver");
     EXPECT_EQ(util::Config::db().password, "testpass");
     
-    unsetenv("FBLAB_DB_USER");
-    unsetenv("FBLAB_DB_PATH");
-    unsetenv("FBLAB_LOG_LEVEL");
+    unsetEnvVar("FBLAB_DB_USER");
+    unsetEnvVar("FBLAB_DB_PATH");
+    unsetEnvVar("FBLAB_LOG_LEVEL");
 }

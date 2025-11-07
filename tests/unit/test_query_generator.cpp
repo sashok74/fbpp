@@ -40,6 +40,9 @@ TEST_F(QueryGeneratorTest, GeneratesHeadersForSelect) {
     fs::path supportHeader = tempDir / "queries.structs.generated.hpp";
 
     fs::path generatorExe = fs::path(BUILD_DIR) / "query_generator";
+#ifdef _WIN32
+    generatorExe.replace_extension(".exe");
+#endif
     ASSERT_TRUE(fs::exists(generatorExe)) << "query_generator executable not found";
 
     std::string command = "\"" + generatorExe.string() + "\" " +

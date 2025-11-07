@@ -4,7 +4,11 @@
 #include "fbpp/core/connection.hpp"
 #include "../test_base.hpp"
 #include <firebird/Interface.h>
+#ifdef _WIN32
+#include <iberror.h>
+#else
 #include <firebird/iberror.h>
+#endif
 
 using namespace fbpp::core;
 
