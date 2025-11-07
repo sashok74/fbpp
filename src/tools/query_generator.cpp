@@ -199,6 +199,10 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput) {
             result.cppType = "fbpp::core::Timestamp";
             result.needsExtendedTypes = true;
             break;
+        case SQL_TIMESTAMP_TZ:
+            result.cppType = "fbpp::core::TimestampTz";
+            result.needsExtendedTypes = true;
+            break;
         case SQL_TYPE_TIME:
             result.cppType = "fbpp::core::Time";
             result.needsExtendedTypes = true;

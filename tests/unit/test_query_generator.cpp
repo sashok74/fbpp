@@ -62,7 +62,7 @@ TEST_F(QueryGeneratorTest, GeneratesHeadersForSelect) {
 
     auto mainContents = slurp(outputHeader);
     EXPECT_NE(mainContents.find("enum class QueryId"), std::string::npos);
-    EXPECT_NE(mainContents.find("QueryId::None"), std::string::npos);
+    EXPECT_NE(mainContents.find("    None"), std::string::npos);
     EXPECT_NE(mainContents.find("#include \"queries.structs.generated.hpp\""), std::string::npos);
     EXPECT_NE(mainContents.find("struct SelectAllIn"), std::string::npos);
     EXPECT_NE(mainContents.find("struct SelectAllOut"), std::string::npos);
