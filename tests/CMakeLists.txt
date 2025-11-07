@@ -1,5 +1,29 @@
 include(GoogleTest)
 
+set(TABLE_TEST_GENERATED_DIR ${CMAKE_BINARY_DIR}/generated/table_test_1)
+set(TABLE_TEST_MAIN_HEADER ${TABLE_TEST_GENERATED_DIR}/queries.generated.hpp)
+set(TABLE_TEST_SUPPORT_HEADER ${TABLE_TEST_GENERATED_DIR}/queries.structs.generated.hpp)
+set(TABLE_TEST_QUERIES_JSON ${CMAKE_CURRENT_SOURCE_DIR}/data/table_test_1_queries.json)
+
+add_custom_command(
+    OUTPUT ${TABLE_TEST_MAIN_HEADER} ${TABLE_TEST_SUPPORT_HEADER}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${TABLE_TEST_GENERATED_DIR}
+    COMMAND $<TARGET_FILE:query_generator>
+        --dsn firebird5:testdb
+        --user SYSDBA
+        --password planomer
+        --charset UTF8
+        --input ${TABLE_TEST_QUERIES_JSON}
+        --output ${TABLE_TEST_MAIN_HEADER}
+        --support ${TABLE_TEST_SUPPORT_HEADER}
+    DEPENDS query_generator ${TABLE_TEST_QUERIES_JSON}
+    VERBATIM
+)
+
+add_custom_target(generate_table_test_1_queries
+    DEPENDS ${TABLE_TEST_MAIN_HEADER} ${TABLE_TEST_SUPPORT_HEADER}
+)
+
 # Core wrapper test
 add_executable(test_core_wrapper
     unit/test_core_wrapper.cpp
@@ -220,6 +244,26 @@ add_dependencies(test_query_generator query_generator)
 target_compile_definitions(test_query_generator PRIVATE BUILD_DIR=\"${CMAKE_BINARY_DIR}\")
 
 gtest_discover_tests(test_query_generator)
+
+add_executable(test_query_generator_integration
+    unit/test_query_generator_integration.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_query_generator_integration PRIVATE
+    fbpp
+    GTest::gtest
+    GTest::gtest_main
+    spdlog::spdlog
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+add_dependencies(test_query_generator_integration generate_table_test_1_queries)
+target_include_directories(test_query_generator_integration PRIVATE ${TABLE_TEST_GENERATED_DIR})
+target_sources(test_query_generator_integration PRIVATE ${TABLE_TEST_MAIN_HEADER} ${TABLE_TEST_SUPPORT_HEADER})
+
+gtest_discover_tests(test_query_generator_integration)
 
 gtest_discover_tests(test_struct_pack)
 

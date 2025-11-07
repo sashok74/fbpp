@@ -32,7 +32,7 @@ TEST_F(QueryGeneratorTest, GeneratesHeadersForSelect) {
     fs::path inputJson = tempDir / "queries.json";
     std::ofstream inputFile(inputJson);
     inputFile << R"({
-        "SelectById": "SELECT ID, F_INTEGER, F_VARCHAR FROM TABLE_TEST_1 WHERE ID = :id"
+        "SelectAll": "SELECT ID, F_BIGINT, F_BOOLEAN, F_CHAR, F_DATE, F_DECFLOAT, F_DECIMAL, F_DOUBLE_PRECISION, F_FLOAT, F_INT128, F_INTEGER, F_NUMERIC, F_SMALINT, F_TIME, F_TIME_TZ, F_TIMESHTAMP, F_TIMESHTAMP_TZ, F_VARCHAR, F_BLOB_B, F_BLOB_T FROM TABLE_TEST_1 WHERE ID = :id"
     })";
     inputFile.close();
 
@@ -59,13 +59,25 @@ TEST_F(QueryGeneratorTest, GeneratesHeadersForSelect) {
 
     auto mainContents = slurp(outputHeader);
     EXPECT_NE(mainContents.find("enum class QueryId"), std::string::npos);
-    EXPECT_NE(mainContents.find("struct SelectByIdIn"), std::string::npos);
-    EXPECT_NE(mainContents.find("struct SelectByIdOut"), std::string::npos);
-    EXPECT_NE(mainContents.find("QueryDescriptor<QueryId::SelectById>"), std::string::npos);
+    EXPECT_NE(mainContents.find("QueryId::None"), std::string::npos);
+    EXPECT_NE(mainContents.find("#include \"queries.structs.generated.hpp\""), std::string::npos);
+    EXPECT_NE(mainContents.find("struct SelectAllIn"), std::string::npos);
+    EXPECT_NE(mainContents.find("struct SelectAllOut"), std::string::npos);
+    EXPECT_NE(mainContents.find("QueryDescriptor<QueryId::SelectAll>"), std::string::npos);
+    EXPECT_NE(mainContents.find("static constexpr std::string_view name = \"SelectAll\""), std::string::npos);
+    EXPECT_NE(mainContents.find("static constexpr std::string_view sql = \"SELECT ID"), std::string::npos);
+    EXPECT_NE(mainContents.find("static constexpr std::string_view positionalSql"), std::string::npos);
+    EXPECT_NE(mainContents.find("static constexpr bool hasNamedParameters"), std::string::npos);
+    EXPECT_NE(mainContents.find("std::optional<bool>"), std::string::npos);
+    EXPECT_NE(mainContents.find("fbpp::core::Date"), std::string::npos);
+    EXPECT_NE(mainContents.find("fbpp::core::DecFloat34"), std::string::npos);
+    EXPECT_NE(mainContents.find("fbpp::core::TimeTz"), std::string::npos);
+    EXPECT_NE(mainContents.find("fbpp::core::TimestampTz"), std::string::npos);
+    EXPECT_NE(mainContents.find("fbpp::core::Blob"), std::string::npos);
 
     auto supportContents = slurp(supportHeader);
-    EXPECT_NE(supportContents.find("StructDescriptor<generated::queries::SelectByIdIn>"), std::string::npos);
-    EXPECT_NE(supportContents.find("StructDescriptor<generated::queries::SelectByIdOut>"), std::string::npos);
+    EXPECT_NE(supportContents.find("StructDescriptor<generated::queries::SelectAllIn>"), std::string::npos);
+    EXPECT_NE(supportContents.find("StructDescriptor<generated::queries::SelectAllOut>"), std::string::npos);
 
     fs::remove_all(tempDir);
 }

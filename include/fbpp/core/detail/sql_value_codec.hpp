@@ -84,6 +84,21 @@ inline ISC_QUAD createBlob(Transaction* transaction, const std::vector<uint8_t>&
     return transaction->createBlob(data);
 }
 
+inline int64_t pow10_int(int scale) {
+    int64_t result = 1;
+    for (int i = 0; i < scale; ++i) {
+        result *= 10;
+    }
+    return result;
+}
+
+inline int64_t round_scaled(double value) {
+    if (value >= 0.0) {
+        return static_cast<int64_t>(value + 0.5);
+    }
+    return static_cast<int64_t>(value - 0.5);
+}
+
 template<typename T>
 void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPtr);
 
@@ -114,7 +129,24 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
         }
     }
 
-    if constexpr (std::is_same_v<ValueType, std::string>) {
+    if constexpr (std::is_same_v<ValueType, double>) {
+        if (ctx.field && ctx.field->scale < 0) {
+            const int scale = -ctx.field->scale;
+            const int64_t factor = pow10_int(scale);
+            int64_t scaled = round_scaled(value * static_cast<double>(factor));
+            if (ctx.field->type == SQL_SHORT || ctx.field->type == (SQL_SHORT | 1)) {
+                int16_t v = static_cast<int16_t>(scaled);
+                std::memcpy(dataPtr, &v, sizeof(int16_t));
+            } else if (ctx.field->type == SQL_LONG || ctx.field->type == (SQL_LONG | 1)) {
+                int32_t v = static_cast<int32_t>(scaled);
+                std::memcpy(dataPtr, &v, sizeof(int32_t));
+            } else {
+                std::memcpy(dataPtr, &scaled, sizeof(int64_t));
+            }
+            setNotNull(ctx.nullIndicator);
+            return;
+        }
+    } else if constexpr (std::is_same_v<ValueType, std::string>) {
         if (isTextBlob(ctx.field)) {
             std::vector<uint8_t> textData(value.begin(), value.end());
             ISC_QUAD blobId = createBlob(ctx.transaction, textData);
@@ -260,7 +292,26 @@ void read_sql_value(const SqlReadContext& ctx, const uint8_t* dataPtr, T& value)
         }
     }
 
-    if constexpr (std::is_same_v<ValueType, std::string>) {
+    if constexpr (std::is_same_v<ValueType, double>) {
+        if (ctx.field && ctx.field->scale < 0) {
+            const int scale = -ctx.field->scale;
+            int64_t raw = 0;
+            if (ctx.field->type == SQL_SHORT || ctx.field->type == (SQL_SHORT | 1)) {
+                int16_t v{};
+                std::memcpy(&v, dataPtr, sizeof(int16_t));
+                raw = v;
+            } else if (ctx.field->type == SQL_LONG || ctx.field->type == (SQL_LONG | 1)) {
+                int32_t v{};
+                std::memcpy(&v, dataPtr, sizeof(int32_t));
+                raw = v;
+            } else {
+                std::memcpy(&raw, dataPtr, sizeof(int64_t));
+            }
+            const int64_t factor = pow10_int(scale);
+            value = static_cast<double>(raw) / static_cast<double>(factor);
+            return;
+        }
+    } else if constexpr (std::is_same_v<ValueType, std::string>) {
         if (isTextBlob(ctx.field) && ctx.transaction) {
             ISC_QUAD blobId{};
             std::memcpy(&blobId, dataPtr, sizeof(ISC_QUAD));

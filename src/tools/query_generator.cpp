@@ -1,7 +1,6 @@
 #include "fbpp/core/connection.hpp"
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/named_param_parser.hpp"
-#include "fbpp/core/connection.hpp"
 #include "fbpp/core/firebird_compat.hpp"
 #include "fbpp/core/message_metadata.hpp"
 #include <nlohmann/json.hpp>
@@ -10,6 +9,7 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <format>
 #include <iostream>
 #include <optional>
 #include <set>
@@ -99,6 +99,20 @@ std::string escapeString(const std::string& input) {
     return result;
 }
 
+std::string escapeBracesForFormat(std::string_view text) {
+    std::string result;
+    result.reserve(text.size());
+    for (char c : text) {
+        if (c == '{' || c == '}') {
+            result.push_back(c);
+            result.push_back(c);
+        } else {
+            result.push_back(c);
+        }
+    }
+    return result;
+}
+
 std::string toCamelCase(const std::string& sqlName, bool lowerFirst = true) {
     std::string out;
     out.reserve(sqlName.size());
@@ -125,7 +139,7 @@ struct TypeMapping {
     std::string cppType;
     bool needsOptional = false;
     bool needsString = false;
-    bool needsTimestamp = false;
+    bool needsExtendedTypes = false;
 };
 
 TypeMapping mapFieldType(const FieldInfo& field, bool isOutput) {
@@ -138,10 +152,18 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput) {
             result.cppType = "std::int16_t";
             break;
         case SQL_LONG:
-            result.cppType = "std::int32_t";
+            if (field.scale < 0) {
+                result.cppType = "double";
+            } else {
+                result.cppType = "std::int32_t";
+            }
             break;
         case SQL_INT64:
-            result.cppType = "std::int64_t";
+            if (field.scale < 0) {
+                result.cppType = "double";
+            } else {
+                result.cppType = "std::int64_t";
+            }
             break;
         case SQL_FLOAT:
             result.cppType = "float";
@@ -154,18 +176,46 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput) {
             result.cppType = "std::string";
             result.needsString = true;
             break;
-        case SQL_TIMESTAMP:
-            result.cppType = "fbpp::core::Timestamp";
-            result.needsTimestamp = true;
+        case SQL_BOOLEAN:
+            result.cppType = "bool";
+            break;
+        case SQL_INT128:
+            result.cppType = "fbpp::core::Int128";
+            result.needsExtendedTypes = true;
+            break;
+        case SQL_DEC16:
+            result.cppType = "fbpp::core::DecFloat16";
+            result.needsExtendedTypes = true;
+            break;
+        case SQL_DEC34:
+            result.cppType = "fbpp::core::DecFloat34";
+            result.needsExtendedTypes = true;
             break;
         case SQL_TYPE_DATE:
             result.cppType = "fbpp::core::Date";
-            result.needsTimestamp = true;
+            result.needsExtendedTypes = true;
+            break;
+        case SQL_TIMESTAMP:
+            result.cppType = "fbpp::core::Timestamp";
+            result.needsExtendedTypes = true;
             break;
         case SQL_TYPE_TIME:
             result.cppType = "fbpp::core::Time";
-            result.needsTimestamp = true;
+            result.needsExtendedTypes = true;
             break;
+        case SQL_TIME_TZ:
+            result.cppType = "fbpp::core::TimeTz";
+            result.needsExtendedTypes = true;
+            break;
+        case SQL_BLOB:
+            if (field.subType == 1) {
+                result.cppType = "fbpp::core::TextBlob";
+            } else {
+                result.cppType = "fbpp::core::Blob";
+            }
+            result.needsExtendedTypes = true;
+            break;
+        case SQL_ARRAY:
         default:
             throw std::runtime_error("Unsupported SQL type: " + std::to_string(field.type));
     }
@@ -188,9 +238,10 @@ struct FieldSpec {
 struct QuerySpec {
     std::string name;
     std::string originalSql;
-    std::string preparedSql;
     std::vector<FieldSpec> inputs;
     std::vector<FieldSpec> outputs;
+    bool hasNamedParameters = false;
+    std::string positionalSql;
 };
 
 std::vector<FieldSpec> buildFieldSpecs(const std::vector<FieldInfo>& fields,
@@ -225,23 +276,22 @@ std::string makeStructName(const std::string& queryName, bool isInput) {
 }
 
 void writeMainHeader(const std::filesystem::path& path,
-                     const std::string& headerGuard,
                      const std::string& supportHeaderName,
                      const std::vector<QuerySpec>& queries) {
     bool needsOptional = false;
     bool needsString = false;
-    bool needsTimestamp = false;
+    bool needsExtended = false;
 
     for (const auto& q : queries) {
         for (const auto& f : q.inputs) {
             needsOptional |= f.type.needsOptional;
             needsString |= f.type.needsString;
-            needsTimestamp |= f.type.needsTimestamp;
+            needsExtended |= f.type.needsExtendedTypes;
         }
         for (const auto& f : q.outputs) {
             needsOptional |= f.type.needsOptional;
             needsString |= f.type.needsString;
-            needsTimestamp |= f.type.needsTimestamp;
+            needsExtended |= f.type.needsExtendedTypes;
         }
     }
 
@@ -253,10 +303,11 @@ void writeMainHeader(const std::filesystem::path& path,
     out << "#pragma once\n\n";
     out << "#include <cstdint>\n";
     out << "#include <string>\n";
+    out << "#include <string_view>\n";
     if (needsOptional) {
         out << "#include <optional>\n";
     }
-    if (needsTimestamp) {
+    if (needsExtended) {
         out << "#include \"fbpp/core/extended_types.hpp\"\n";
     }
     out << "#include \"fbpp/core/query_executor.hpp\"\n\n";
@@ -264,12 +315,19 @@ void writeMainHeader(const std::filesystem::path& path,
     out << "namespace generated::queries {\n\n";
 
     out << "enum class QueryId {\n";
-    for (std::size_t i = 0; i < queries.size(); ++i) {
-        out << "    " << queries[i].name;
-        if (i + 1 != queries.size()) {
-            out << ",";
+    out << "    None";
+    if (!queries.empty()) {
+        out << ",\n";
+        for (std::size_t i = 0; i < queries.size(); ++i) {
+            out << std::format("    {}", queries[i].name);
+            if (i + 1 != queries.size()) {
+                out << ",\n";
+            } else {
+                out << '\n';
+            }
         }
-        out << "\n";
+    } else {
+        out << '\n';
     }
     out << "};\n\n";
 
@@ -279,12 +337,13 @@ void writeMainHeader(const std::filesystem::path& path,
         auto writeStruct = [&](bool isInput) {
             const auto& fields = isInput ? q.inputs : q.outputs;
             std::string structName = makeStructName(q.name, isInput);
-            out << "struct " << structName << " {\n";
-            for (const auto& f : fields) {
-                out << "    " << f.type.cppType << " " << f.memberName << ";\n";
-            }
+            out << std::format("struct {} {{\n", structName);
             if (fields.empty()) {
-                out << "    // empty\n";
+                out << "    // no fields\n";
+            } else {
+                for (const auto& f : fields) {
+                    out << std::format("    {} {};\n", f.type.cppType, f.memberName);
+                }
             }
             out << "};\n\n";
         };
@@ -294,19 +353,25 @@ void writeMainHeader(const std::filesystem::path& path,
     }
 
     for (const auto& q : queries) {
-        out << "template<>\nstruct QueryDescriptor<QueryId::" << q.name << "> {\n";
-        out << "    static constexpr std::string_view sql = \""
-            << escapeString(q.preparedSql) << "\";\n";
+        const auto escapedName = escapeBracesForFormat(q.name);
+        const auto escapedOriginal = escapeBracesForFormat(escapeString(q.originalSql));
+        const auto escapedPrepared = escapeBracesForFormat(escapeString(q.positionalSql));
+        out << std::format("template<>\nstruct QueryDescriptor<QueryId::{}> {{\n", q.name);
+        out << std::format("    static constexpr QueryId id = QueryId::{};\n", q.name);
+        out << std::format("    static constexpr std::string_view name = \"{}\";\n", escapedName);
+        out << std::format("    static constexpr std::string_view sql = \"{}\";\n", escapedOriginal);
+        out << std::format("    static constexpr std::string_view positionalSql = \"{}\";\n", escapedPrepared);
+        out << std::format("    static constexpr bool hasNamedParameters = {};\n", q.hasNamedParameters ? "true" : "false");
         out << "    using Input = " << makeStructName(q.name, true) << ";\n";
         out << "    using Output = " << makeStructName(q.name, false) << ";\n";
         out << "};\n\n";
     }
 
     out << "} // namespace generated::queries\n";
+    out << "\n#include \"" << supportHeaderName << "\"\n";
 }
 
 void writeSupportHeader(const std::filesystem::path& path,
-                        const std::string& mainHeaderName,
                         const std::vector<QuerySpec>& queries) {
     std::ofstream out(path);
     if (!out) {
@@ -315,9 +380,9 @@ void writeSupportHeader(const std::filesystem::path& path,
 
     out << "#pragma once\n\n";
     out << "#include <tuple>\n";
+    out << "#include <utility>\n";
     out << "#include \"fbpp/core/struct_pack.hpp\"\n";
     out << "#include \"fbpp/core/firebird_compat.hpp\"\n";
-    out << "#include \"" << mainHeaderName << "\"\n\n";
 
     out << "namespace fbpp::core {\n\n";
 
@@ -326,23 +391,30 @@ void writeSupportHeader(const std::filesystem::path& path,
             const auto& fields = isInput ? q.inputs : q.outputs;
             std::string structName = "generated::queries::" + makeStructName(q.name, isInput);
             out << "template<>\nstruct StructDescriptor<" << structName << "> {\n";
-            out << "    static constexpr auto fields = std::make_tuple(\n";
-            for (std::size_t i = 0; i < fields.size(); ++i) {
-                const auto& f = fields[i];
-                out << "        fbpp::core::makeField<&" << structName << "::" << f.memberName
-                    << ">(\"" << f.sqlName << "\", " << f.info.type << ", "
-                    << f.info.scale << ", " << f.info.length << ", "
-                    << (f.info.nullable ? "true" : "false") << ", "
-                    << f.info.subType << ")";
-                if (i + 1 != fields.size()) {
-                    out << ",";
-                }
-                out << "\n";
-            }
             if (fields.empty()) {
-                out << "        std::tuple<>{}\n";
+                out << "    static constexpr auto fields = std::make_tuple();\n";
+            } else {
+                out << "    static constexpr auto fields = std::make_tuple(\n";
+                for (std::size_t i = 0; i < fields.size(); ++i) {
+                    const auto& f = fields[i];
+                    out << std::format(
+                        "        fbpp::core::makeField<&{}::{}>(\"{}\", {}, {}, {}, {}, {})",
+                        structName,
+                        f.memberName,
+                        escapeBracesForFormat(f.sqlName),
+                        f.info.type,
+                        f.info.scale,
+                        f.info.length,
+                        f.info.nullable ? "true" : "false",
+                        f.info.subType);
+                    if (i + 1 != fields.size()) {
+                        out << ",\n";
+                    } else {
+                        out << "\n";
+                    }
+                }
+                out << "    );\n";
             }
-            out << "    );\n";
             out << "};\n\n";
         };
 
@@ -392,7 +464,8 @@ int main(int argc, char** argv) {
             spec.originalSql = it.value().get<std::string>();
 
             auto parseResult = NamedParamParser::parse(spec.originalSql);
-            spec.preparedSql = parseResult.hasNamedParams ? parseResult.convertedSql : spec.originalSql;
+            spec.positionalSql = parseResult.hasNamedParams ? parseResult.convertedSql : spec.originalSql;
+            spec.hasNamedParameters = parseResult.hasNamedParams;
 
             auto meta = connection.describeQuery(spec.originalSql);
             spec.inputs = buildFieldSpecs(meta.inputFields, false);
@@ -407,10 +480,10 @@ int main(int argc, char** argv) {
         std::filesystem::create_directories(opts.outputHeader.parent_path());
         std::filesystem::create_directories(opts.supportHeader.parent_path());
 
-        auto mainHeaderName = opts.outputHeader.filename().string();
+        auto supportHeaderName = opts.supportHeader.filename().string();
 
-        writeMainHeader(opts.outputHeader, "GENERATED_QUERIES_HPP", mainHeaderName, querySpecs);
-        writeSupportHeader(opts.supportHeader, mainHeaderName, querySpecs);
+        writeMainHeader(opts.outputHeader, supportHeaderName, querySpecs);
+        writeSupportHeader(opts.supportHeader, querySpecs);
 
         return 0;
     } catch (const FirebirdException& e) {
@@ -421,4 +494,3 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
-
