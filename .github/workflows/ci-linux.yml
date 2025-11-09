@@ -38,6 +38,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Display compiler versions
+        run: |
+          echo "Compiler: ${{ matrix.compiler.cc }} / ${{ matrix.compiler.cxx }}"
+          ${{ matrix.compiler.cc }} --version || true
+          ${{ matrix.compiler.cxx }} --version || true
+
       - name: Install dependencies
         run: |
           sudo apt-get update
