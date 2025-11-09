@@ -59,6 +59,11 @@ void Connection::connect(const ConnectionParams& params) {
             dpb->insertString(&st, isc_dpb_sql_role_name, params.role.c_str());
         }
 
+        // Set SQL dialect (1, 2, or 3)
+        if (params.sql_dialect > 0) {
+            dpb->insertInt(&st, isc_dpb_sql_dialect, params.sql_dialect);
+        }
+
         // Attach to database
         attachment_ = env_.getProvider()->attachDatabase(
             &st,
@@ -294,6 +299,11 @@ void Connection::createDatabase(const ConnectionParams& params) {
 
         if (!params.role.empty()) {
             dpb->insertString(&st, isc_dpb_sql_role_name, params.role.c_str());
+        }
+
+        // Set SQL dialect (1, 2, or 3)
+        if (params.sql_dialect > 0) {
+            dpb->insertInt(&st, isc_dpb_sql_dialect, params.sql_dialect);
         }
 
         dpb->insertInt(&st, isc_dpb_page_size, 8192);
