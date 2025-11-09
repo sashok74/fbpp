@@ -40,8 +40,9 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
         try {
             // Prepare statement without transaction (uses implicit transaction)
             // Use converted SQL if named params were found
+            auto tra = connection->StartTransaction();
             Firebird::IStatement* stmt = attachment->prepare(
-                &st, nullptr, 0, actualSql.c_str(), 3, flags);
+                &st, tra->getTransaction(), 0, actualSql.c_str(), 3, flags);
 
             if (!stmt) {
                 st.dispose();
@@ -117,8 +118,9 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
     try {
         // Prepare statement without transaction (uses implicit transaction)
         // Use converted SQL if named params were found
+        auto tra = connection->StartTransaction();
         Firebird::IStatement* fbStmt = attachment->prepare(
-            &st, nullptr, 0, actualSql.c_str(), 3, flags);
+            &st, tra->getTransaction(), 0, actualSql.c_str(), 3, flags);
 
         if (!fbStmt) {
             st.dispose();

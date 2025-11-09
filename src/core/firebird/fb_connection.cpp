@@ -476,10 +476,11 @@ Connection::QueryMetadataInfo Connection::describeQuery(const std::string& sql) 
     Firebird::ThrowStatusWrapper st(raw);
 
     Firebird::IStatement* rawStmt = nullptr;
+    auto tra = StartTransaction();
     try {
         rawStmt = attachment_->prepare(
             &st,
-            nullptr,
+            tra->getTransaction(),
             0,
             actualSql.c_str(),
             3,
