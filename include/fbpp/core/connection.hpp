@@ -26,6 +26,7 @@ struct ConnectionParams {
     std::string password = "planomer";
     std::string charset = "UTF8";
     std::string role;
+    int sql_dialect = 3;  // SQL dialect (1, 2, or 3). Default: 3 (modern dialect)
 };
 
 // Cancel operation options (from Firebird's consts_pub.h)
