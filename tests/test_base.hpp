@@ -69,9 +69,22 @@ protected:
             // If port is explicitly provided, append it to server
             server = server + "/" + env_port;
         }
-        if (const char* env_path = std::getenv("FIREBIRD_DB_PATH")) {
-            path = env_path;
+
+        // Handle both temp and persistent DB paths
+        // If path is relative (like "testdb"), check for persistent DB path first
+        bool is_relative_path = (path.find('/') == std::string::npos);
+        if (is_relative_path) {
+            // For relative paths, prefer FIREBIRD_PERSISTENT_DB_PATH
+            if (const char* env_persistent_path = std::getenv("FIREBIRD_PERSISTENT_DB_PATH")) {
+                path = env_persistent_path;
+            }
+        } else {
+            // For absolute paths, use FIREBIRD_DB_PATH (temp DB)
+            if (const char* env_path = std::getenv("FIREBIRD_DB_PATH")) {
+                path = env_path;
+            }
         }
+
         if (const char* env_user = std::getenv("FIREBIRD_USER")) {
             user = env_user;
         }
