@@ -71,23 +71,35 @@ jobs:
           ls -la /usr/lib/x86_64-linux-gnu/libfbclient.so* || echo "libfbclient not found"
 
       - name: Setup Conan profile
+        env:
+          CC: ${{ matrix.compiler.cc }}
+          CXX: ${{ matrix.compiler.cxx }}
         run: |
           conan profile detect --force
-          conan profile show
+          # Set compiler in Conan profile
+          conan profile show default
+          conan profile update settings.compiler.cppstd=20 default
+          conan profile show default
+
+      - name: Install Conan dependencies
+        env:
+          CC: ${{ matrix.compiler.cc }}
+          CXX: ${{ matrix.compiler.cxx }}
+        run: |
+          conan install . --build=missing -s build_type=${{ matrix.build_type }} -s compiler.cppstd=20
 
       - name: Configure CMake
         env:
           CC: ${{ matrix.compiler.cc }}
           CXX: ${{ matrix.compiler.cxx }}
         run: |
-          conan install . --build=missing -s build_type=${{ matrix.build_type }}
           cmake --preset conan-$(echo "${{ matrix.build_type }}" | tr '[:upper:]' '[:lower:]') \
             -DBUILD_TESTING=ON \
             -DBUILD_EXAMPLES=ON
 
       - name: Build
         run: |
-          cmake --build --preset conan-$(echo "${{ matrix.build_type }}" | tr '[:upper:]' '[:lower:]') -j$(nproc) -- VERBOSE=1
+          cmake --build --preset conan-$(echo "${{ matrix.build_type }}" | tr '[:upper:]' '[:lower:]')
 
       - name: Run tests
         env:
@@ -115,7 +127,9 @@ jobs:
           timeout 10 bash -c 'until echo > /dev/tcp/localhost/3050; do sleep 1; done' && echo "✓ Firebird port 3050 is open" || echo "✗ Cannot connect to Firebird port 3050"
 
           # Run tests with environment variable overrides
-          ctest --preset conan-$(echo "${{ matrix.build_type }}" | tr '[:upper:]' '[:lower:]') --output-on-failure --verbose
+          # Conan with cmake_layout creates build/<build_type> directory
+          cd build/${{ matrix.build_type }}
+          ctest --output-on-failure --verbose
 
       - name: Check formatting (clang-format)
         if: matrix.compiler.cxx == 'clang++-14' && matrix.build_type == 'Release'
