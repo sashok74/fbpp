@@ -95,7 +95,26 @@ jobs:
           FIREBIRD_PORT: 3050
           FIREBIRD_USER: SYSDBA
           FIREBIRD_PASSWORD: masterkey
+          FIREBIRD_DB_PATH: /tmp/fbpp_temp_test.fdb
+          FIREBIRD_PERSISTENT_DB_PATH: /tmp/fbpp_persistent_test.fdb
+          FIREBIRD_CHARSET: UTF8
         run: |
+          # Create directory for temporary databases
+          mkdir -p /tmp
+
+          # Debug: Print environment variables
+          echo "=== Firebird connection settings ==="
+          echo "FIREBIRD_HOST=$FIREBIRD_HOST"
+          echo "FIREBIRD_PORT=$FIREBIRD_PORT"
+          echo "FIREBIRD_USER=$FIREBIRD_USER"
+          echo "FIREBIRD_DB_PATH=$FIREBIRD_DB_PATH"
+          echo "FIREBIRD_PERSISTENT_DB_PATH=$FIREBIRD_PERSISTENT_DB_PATH"
+
+          # Debug: Test Firebird service connectivity
+          echo "=== Testing Firebird service connectivity ==="
+          timeout 10 bash -c 'until echo > /dev/tcp/localhost/3050; do sleep 1; done' && echo "✓ Firebird port 3050 is open" || echo "✗ Cannot connect to Firebird port 3050"
+
+          # Run tests with environment variable overrides
           ctest --preset conan-$(echo "${{ matrix.build_type }}" | tr '[:upper:]' '[:lower:]') --output-on-failure --verbose
 
       - name: Check formatting (clang-format)

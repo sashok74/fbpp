@@ -5,6 +5,7 @@
 #include <string>
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include <cstdlib>  // for std::getenv()
 
 #if defined(_WIN32)
 #include <process.h>  // for _getpid()
@@ -51,11 +52,55 @@ protected:
     
     static ConnectionParams getConnectionParams(const json& db_config) {
         ConnectionParams params;
-        params.database = db_config["server"].get<std::string>() + ":" + 
-                         db_config["path"].get<std::string>();
-        params.user = db_config["user"].get<std::string>();
-        params.password = db_config["password"].get<std::string>();
-        params.charset = db_config["charset"].get<std::string>();
+
+        // Read defaults from JSON config
+        std::string server = db_config["server"].get<std::string>();
+        std::string path = db_config["path"].get<std::string>();
+        std::string user = db_config["user"].get<std::string>();
+        std::string password = db_config["password"].get<std::string>();
+        std::string charset = db_config["charset"].get<std::string>();
+
+        // Override with environment variables if set (for CI/CD)
+        // This follows 12-factor app methodology: ENV vars > config files
+        if (const char* env_host = std::getenv("FIREBIRD_HOST")) {
+            server = env_host;
+        }
+        if (const char* env_port = std::getenv("FIREBIRD_PORT")) {
+            // If port is explicitly provided, append it to server
+            server = server + "/" + env_port;
+        }
+
+        // Handle both temp and persistent DB paths
+        // If path is relative (like "testdb"), check for persistent DB path first
+        bool is_relative_path = (path.find('/') == std::string::npos);
+        if (is_relative_path) {
+            // For relative paths, prefer FIREBIRD_PERSISTENT_DB_PATH
+            if (const char* env_persistent_path = std::getenv("FIREBIRD_PERSISTENT_DB_PATH")) {
+                path = env_persistent_path;
+            }
+        } else {
+            // For absolute paths, use FIREBIRD_DB_PATH (temp DB)
+            if (const char* env_path = std::getenv("FIREBIRD_DB_PATH")) {
+                path = env_path;
+            }
+        }
+
+        if (const char* env_user = std::getenv("FIREBIRD_USER")) {
+            user = env_user;
+        }
+        if (const char* env_pass = std::getenv("FIREBIRD_PASSWORD")) {
+            password = env_pass;
+        }
+        if (const char* env_charset = std::getenv("FIREBIRD_CHARSET")) {
+            charset = env_charset;
+        }
+
+        // Build connection params
+        params.database = server + ":" + path;
+        params.user = user;
+        params.password = password;
+        params.charset = charset;
+
         return params;
     }
     
