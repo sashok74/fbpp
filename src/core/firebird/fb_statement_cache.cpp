@@ -37,25 +37,41 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
         Firebird::IStatus* raw = env.getMaster()->getStatus();
         Firebird::ThrowStatusWrapper st(raw);
 
-        // Prepare statement without transaction (uses implicit transaction)
-        // Use converted SQL if named params were found
-        Firebird::IStatement* stmt = attachment->prepare(
-            &st, nullptr, 0, actualSql.c_str(), 3, flags);
+        try {
+            // Prepare statement without transaction (uses implicit transaction)
+            // Use converted SQL if named params were found
+            Firebird::IStatement* stmt = attachment->prepare(
+                &st, nullptr, 0, actualSql.c_str(), 3, flags);
 
-        if (!stmt) {
+            if (!stmt) {
+                st.dispose();
+                throw FirebirdException("Failed to prepare statement");
+            }
+
             st.dispose();
-            throw FirebirdException("Failed to prepare statement");
+            auto stmtPtr = std::make_shared<Statement>(stmt, connection);
+
+            // Set named parameter mapping if any
+            if (parseResult.hasNamedParams) {
+                stmtPtr->setNamedParamMapping(parseResult.nameToPositions, true);
+            }
+
+            return stmtPtr;
+
+        } catch (const Firebird::FbException& e) {
+            FirebirdException fbppEx(e);
+
+            util::trace(util::TraceLevel::error, "StatementCache",
+                        [&](auto& oss) {
+                            oss << "Failed to prepare SQL: " << actualSql << "\n"
+                                << "Error: " << fbppEx.what() << "\n"
+                                << "Code: " << fbppEx.getErrorCode() << "\n"
+                                << "SQLState: " << fbppEx.getSQLState();
+                        });
+
+            st.dispose();
+            throw fbppEx;
         }
-
-        st.dispose();
-        auto stmtPtr = std::make_shared<Statement>(stmt, connection);
-
-        // Set named parameter mapping if any
-        if (parseResult.hasNamedParams) {
-            stmtPtr->setNamedParamMapping(parseResult.nameToPositions, true);
-        }
-
-        return stmtPtr;
     }
 
     std::lock_guard<std::mutex> lock(mutex_);
@@ -98,51 +114,62 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
     Firebird::IStatus* raw = env.getMaster()->getStatus();
     Firebird::ThrowStatusWrapper st(raw);
 
-    // Prepare statement without transaction (uses implicit transaction)
-    // Use converted SQL if named params were found
-    Firebird::IStatement* fbStmt = attachment->prepare(
-        &st, nullptr, 0, actualSql.c_str(), 3, flags);
+    try {
+        // Prepare statement without transaction (uses implicit transaction)
+        // Use converted SQL if named params were found
+        Firebird::IStatement* fbStmt = attachment->prepare(
+            &st, nullptr, 0, actualSql.c_str(), 3, flags);
 
-    if (!fbStmt) {
+        if (!fbStmt) {
+            st.dispose();
+            throw FirebirdException("prepare() returned nullptr");
+        }
+
+        st.dispose();
+        auto stmt = std::make_shared<Statement>(fbStmt, connection);
+
+        // Set named parameter mapping if any
+        if (parseResult.hasNamedParams) {
+            stmt->setNamedParamMapping(parseResult.nameToPositions, true);
+        }
+
+        // Create cache entry
+        auto entry = std::make_unique<CachedStatement>();
+        entry->statement = stmt;  // Share ownership
+        entry->sql = sql;
+        entry->flags = flags;
+        entry->lastUsed = std::chrono::steady_clock::now();
+        entry->useCount = 1;
+
+        // Extract metadata
+        extractMetadata(entry->statement.get(), *entry);
+
+        // Add to cache
+        cache_[key] = std::move(entry);
+
+        // Add to LRU list (front = most recent)
+        lruList_.push_front(key);
+        lruMap_[key] = lruList_.begin();
+
+        stats_.cacheSize = cache_.size();
+
+        // Return the shared pointer
+        return stmt;
+
+    } catch (const Firebird::FbException& e) {
+        FirebirdException fbppEx(e);
+
         util::trace(util::TraceLevel::error, "StatementCache",
                     [&](auto& oss) {
-                        oss << "Failed to prepare statement: "
-                            << actualSql.substr(0, 50);
+                        oss << "Failed to prepare SQL: " << actualSql << "\n"
+                            << "Error: " << fbppEx.what() << "\n"
+                            << "Code: " << fbppEx.getErrorCode() << "\n"
+                            << "SQLState: " << fbppEx.getSQLState();
                     });
+
         st.dispose();
-        return nullptr;
+        throw fbppEx;
     }
-
-    st.dispose();
-    auto stmt = std::make_shared<Statement>(fbStmt, connection);
-
-    // Set named parameter mapping if any
-    if (parseResult.hasNamedParams) {
-        stmt->setNamedParamMapping(parseResult.nameToPositions, true);
-    }
-
-    // Create cache entry
-    auto entry = std::make_unique<CachedStatement>();
-    entry->statement = stmt;  // Share ownership
-    entry->sql = sql;
-    entry->flags = flags;
-    entry->lastUsed = std::chrono::steady_clock::now();
-    entry->useCount = 1;
-
-    // Extract metadata
-    extractMetadata(entry->statement.get(), *entry);
-
-    // Add to cache
-    cache_[key] = std::move(entry);
-
-    // Add to LRU list (front = most recent)
-    lruList_.push_front(key);
-    lruMap_[key] = lruList_.begin();
-
-    stats_.cacheSize = cache_.size();
-
-    // Return the shared pointer
-    return stmt;
 }
 
 void StatementCache::clear() {
