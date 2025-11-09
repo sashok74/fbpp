@@ -2,6 +2,7 @@
 # All examples use existing TABLE_TEST_1 database table
 
 # Common settings for all examples
+find_package(Threads REQUIRED)
 set(EXAMPLE_SOURCES
     01_basic_operations.cpp      # Basic CRUD operations with tuples (now with auto-cache)
     02_json_operations.cpp       # JSON parameter binding and result fetching
@@ -27,14 +28,15 @@ foreach(example_src ${EXAMPLE_SOURCES})
         ${FIREBIRD_INCLUDE_DIR}
     )
 
-    target_link_libraries(${example_name} PRIVATE
+    set(example_libs
         fbpp
         ${FIREBIRD_LIBRARIES}
         nlohmann_json::nlohmann_json
         ttmath
         cppdecimal
-        pthread
     )
+
+    target_link_libraries(${example_name} PRIVATE ${example_libs} Threads::Threads)
 
     target_compile_features(${example_name} PRIVATE cxx_std_20)
 endforeach()

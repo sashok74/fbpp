@@ -9,6 +9,12 @@
 #include <ctime>
 #include <stdexcept>
 
+#if defined(_MSVC_LANG) && (_MSVC_LANG > __cplusplus)
+#define FBPP_EFFECTIVE_CPLUSPLUS _MSVC_LANG
+#else
+#define FBPP_EFFECTIVE_CPLUSPLUS __cplusplus
+#endif
+
 namespace fbpp::core::timestamp_utils {
 
 // Константы
@@ -110,7 +116,7 @@ inline uint32_t current_time_of_day() {
     return to_firebird_time(time_since_midnight);
 }
 
-#if __cplusplus >= 202002L
+#if FBPP_EFFECTIVE_CPLUSPLUS >= 202002L
 // C++20 enhanced date/time functions
 
 /**
@@ -198,9 +204,11 @@ inline int days_between(std::chrono::year_month_day from, std::chrono::year_mont
     auto from_days = std::chrono::sys_days{from};
     auto to_days = std::chrono::sys_days{to};
     auto diff = to_days - from_days;
-    return diff.count();
+    return static_cast<int>(diff.count());
 }
 
-#endif // C++20
+#endif // FBPP_EFFECTIVE_CPLUSPLUS >= 202002L
 
 } // namespace fbpp::core::timestamp_utils
+
+#undef FBPP_EFFECTIVE_CPLUSPLUS

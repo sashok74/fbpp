@@ -79,6 +79,7 @@ logs/
 *.bak
 *.cache
 cache/
+.claude
 
 # Documentation (local use only)
 # doc/

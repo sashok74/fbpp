@@ -19,8 +19,19 @@
 #include <tuple>
 #include <chrono>
 #include <ctime>
+#include <cstdint>
+#if defined(_WIN32)
+#include <intrin.h>
+#else
 #include <arpa/inet.h>  // для htonl
-#if __cplusplus >= 202002L
+#endif
+#if defined(_MSVC_LANG) && (_MSVC_LANG > __cplusplus)
+#define FBPP_SAMPLE_CPLUSPLUS _MSVC_LANG
+#else
+#define FBPP_SAMPLE_CPLUSPLUS __cplusplus
+#endif
+
+#if FBPP_SAMPLE_CPLUSPLUS >= 202002L
 #include <format>
 #endif
 #include <fbpp/fbpp_all.hpp>
@@ -37,13 +48,23 @@ using Decimal34_8 = fbpp::adapters::TTNumeric<2, -8>;
 using Numeric16_6 = fbpp::adapters::TTNumeric<1, -6>;
 
 // C++20 date/time types
-#if __cplusplus >= 202002L
+#if FBPP_SAMPLE_CPLUSPLUS >= 202002L
 using Date = std::chrono::year_month_day;
 using Time = std::chrono::hh_mm_ss<std::chrono::microseconds>;
 using Timestamp = std::chrono::system_clock::time_point;
 using TimestampTz = std::chrono::zoned_time<std::chrono::microseconds>;
 using TimeWithTz = std::pair<std::chrono::hh_mm_ss<std::chrono::microseconds>, std::string>;
 #endif
+
+namespace {
+inline uint32_t hostToNetwork32(uint32_t value) {
+#if defined(_WIN32)
+    return _byteswap_ulong(value);
+#else
+    return static_cast<uint32_t>(htonl(value));
+#endif
+}
+} // namespace
 
 // Для красивого вывода
 void printHeader(const std::string& title) {
@@ -335,7 +356,7 @@ int main() {
 
         auto now = std::chrono::system_clock::now();
 
-#if __cplusplus >= 202002L
+#if FBPP_SAMPLE_CPLUSPLUS >= 202002L
         // C++20 типы
         auto today = std::chrono::floor<std::chrono::days>(now);
         Date test_date{std::chrono::year_month_day{today}};
@@ -404,7 +425,7 @@ int main() {
         cursor = transaction->openCursor(stmt, std::make_tuple(dt_id));
 
         // Определяем типы для чтения полей даты/времени
-#if __cplusplus >= 202002L
+#if FBPP_SAMPLE_CPLUSPLUS >= 202002L
         std::tuple<
             std::optional<Date>,
             std::optional<Time>,
@@ -426,7 +447,7 @@ int main() {
             std::cout << "Прочитанные даты и время:\n";
             std::cout << std::string(40, '-') << "\n";
 
-#if __cplusplus >= 202002L
+#if FBPP_SAMPLE_CPLUSPLUS >= 202002L
             auto [read_date, read_time, read_timestamp, read_time_tz, read_timestamp_tz] = datetime_row;
 
             if (read_date) {
@@ -614,18 +635,21 @@ int main() {
         binary_data.insert(binary_data.end(), png_signature, png_signature + 8);
 
         // IHDR chunk - заголовок изображения
-        struct {
+#pragma pack(push, 1)
+        struct IhdrChunk {
             uint32_t length = 0x0D000000;  // 13 bytes (big-endian)
             char type[4] = {'I', 'H', 'D', 'R'};
             uint32_t width = 0x08000000;   // 8 pixels (big-endian)
             uint32_t height = 0x08000000;  // 8 pixels (big-endian)
-            uint8_t bit_depth = 8;          // 8 bits per channel
-            uint8_t color_type = 2;         // RGB
-            uint8_t compression = 0;        // Deflate
-            uint8_t filter = 0;             // Adaptive
-            uint8_t interlace = 0;          // No interlace
+            uint8_t bit_depth = 8;         // 8 bits per channel
+            uint8_t color_type = 2;        // RGB
+            uint8_t compression = 0;       // Deflate
+            uint8_t filter = 0;            // Adaptive
+            uint8_t interlace = 0;         // No interlace
             uint32_t crc = 0x7E597C57;     // Correct CRC for this IHDR
-        } __attribute__((packed)) ihdr;
+        };
+#pragma pack(pop)
+        IhdrChunk ihdr;
 
         binary_data.insert(binary_data.end(),
                           reinterpret_cast<uint8_t*>(&ihdr),
@@ -676,7 +700,7 @@ int main() {
         compressed_data.push_back(adler & 0xFF);
 
         // IDAT chunk
-        uint32_t idat_length = htonl(compressed_data.size());
+        uint32_t idat_length = hostToNetwork32(static_cast<uint32_t>(compressed_data.size()));
         binary_data.insert(binary_data.end(),
                           reinterpret_cast<uint8_t*>(&idat_length),
                           reinterpret_cast<uint8_t*>(&idat_length) + 4);
@@ -690,7 +714,7 @@ int main() {
 
         // CRC для IDAT (упрощенный)
         uint32_t idat_crc = 0x12345678;  // Dummy CRC
-        idat_crc = htonl(idat_crc);
+        idat_crc = hostToNetwork32(idat_crc);
         binary_data.insert(binary_data.end(),
                           reinterpret_cast<uint8_t*>(&idat_crc),
                           reinterpret_cast<uint8_t*>(&idat_crc) + 4);
@@ -1102,6 +1126,8 @@ int main() {
         std::cerr << "\n✗ Ошибка: " << e.what() << "\n";
         return 1;
     }
-    
+
     return 0;
 }
+
+#undef FBPP_SAMPLE_CPLUSPLUS

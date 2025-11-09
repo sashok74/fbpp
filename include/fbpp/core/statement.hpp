@@ -5,6 +5,7 @@
 #include "fbpp/core/pack_utils.hpp"
 #include "fbpp/core/named_param_helper.hpp"
 #include "fbpp/core/firebird_compat.hpp"
+#include "fbpp/core/result_set.hpp"
 #include <memory>
 #include <string>
 #include <vector>
@@ -19,7 +20,6 @@ namespace core {
 class Connection;
 class Transaction;
 class MessageMetadata;
-class ResultSet;
 class Batch;
 
 /**

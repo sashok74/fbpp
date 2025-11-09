@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -265,58 +266,83 @@ std::string formatOptionalDecFloat(const std::optional<DecFloat34>& value) {
     return value->to_string();
 }
 
-std::string toUnsignedString(unsigned __int128 value) {
-    if (value == 0) {
-        return "0";
+static std::pair<bool, std::string> decimalMagnitude(const Int128& value) {
+    std::array<uint8_t, 16> raw{};
+    std::memcpy(raw.data(), value.data(), raw.size());
+
+    bool negative = (raw[15] & 0x80) != 0;
+    if (negative) {
+        uint8_t carry = 1;
+        for (size_t i = 0; i < raw.size(); ++i) {
+            raw[i] = ~raw[i];
+            uint16_t sum = static_cast<uint16_t>(raw[i]) + carry;
+            raw[i] = static_cast<uint8_t>(sum);
+            carry = static_cast<uint8_t>(sum >> 8);
+        }
+    }
+
+    std::array<uint32_t, 4> limbs{};
+    for (int i = 0; i < 4; ++i) {
+        size_t base = static_cast<size_t>(i) * 4;
+        limbs[i] = static_cast<uint32_t>(raw[base]) |
+                   (static_cast<uint32_t>(raw[base + 1]) << 8) |
+                   (static_cast<uint32_t>(raw[base + 2]) << 16) |
+                   (static_cast<uint32_t>(raw[base + 3]) << 24);
     }
 
     std::string digits;
-    while (value > 0) {
-        unsigned digit = static_cast<unsigned>(value % 10);
-        digits.push_back(static_cast<char>('0' + digit));
-        value /= 10;
+    digits.reserve(40);
+    auto is_zero = [&limbs]() {
+        return std::all_of(limbs.begin(), limbs.end(), [](uint32_t v) { return v == 0; });
+    };
+
+    if (is_zero()) {
+        return {false, "0"};
     }
+
+    while (!is_zero()) {
+        uint64_t carry = 0;
+        for (int idx = 3; idx >= 0; --idx) {
+            uint64_t current = (carry << 32) | limbs[idx];
+            limbs[idx] = static_cast<uint32_t>(current / 10);
+            carry = current % 10;
+        }
+        digits.push_back(static_cast<char>('0' + carry));
+    }
+
     std::reverse(digits.begin(), digits.end());
-    return digits;
+    if (digits == "0") {
+        negative = false;
+    }
+    return {negative, digits};
 }
 
 std::string formatInt128Value(const Int128& value, int scale) {
-    static_assert(sizeof(unsigned __int128) == 16, "__int128 support required");
-
-    __int128 signedValue{};
-    std::memcpy(&signedValue, value.data(), sizeof(signedValue));
-
-    bool negative = signedValue < 0;
-    unsigned __int128 magnitude = negative
-        ? static_cast<unsigned __int128>(-signedValue)
-        : static_cast<unsigned __int128>(signedValue);
-
+    auto [negative, magnitude] = decimalMagnitude(value);
     int fractionalDigits = scale < 0 ? -scale : 0;
-    unsigned __int128 scaleFactor = 1;
-    for (int i = 0; i < fractionalDigits; ++i) {
-        scaleFactor *= 10;
-    }
+    std::string result;
 
-    std::ostringstream oss;
-    if (negative && magnitude != 0) {
-        oss << '-';
+    if (negative) {
+        result.push_back('-');
     }
 
     if (fractionalDigits == 0) {
-        oss << toUnsignedString(magnitude);
-        return oss.str();
+        result += magnitude;
+        return result;
     }
 
-    unsigned __int128 integerPart = magnitude / scaleFactor;
-    unsigned __int128 fractionalPart = magnitude % scaleFactor;
-
-    oss << toUnsignedString(integerPart) << '.';
-    std::string fractional = toUnsignedString(fractionalPart);
-    if (static_cast<int>(fractional.size()) < fractionalDigits) {
-        oss << std::string(static_cast<std::size_t>(fractionalDigits - static_cast<int>(fractional.size())), '0');
+    if (static_cast<int>(magnitude.size()) <= fractionalDigits) {
+        result += "0.";
+        result.append(static_cast<std::size_t>(fractionalDigits - static_cast<int>(magnitude.size())), '0');
+        result += magnitude;
+        return result;
     }
-    oss << fractional;
-    return oss.str();
+
+    const std::size_t splitPos = magnitude.size() - static_cast<std::size_t>(fractionalDigits);
+    result.append(magnitude, 0, splitPos);
+    result += '.';
+    result.append(magnitude, splitPos, std::string::npos);
+    return result;
 }
 
 std::string formatOptionalInt128(const std::optional<Int128>& value, int scale) {
