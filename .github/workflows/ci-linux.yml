@@ -53,6 +53,7 @@ jobs:
             ninja-build \
             ${{ matrix.compiler.cc }} \
             ${{ matrix.compiler.cxx }} \
+            libstdc++-11-dev \
             python3-pip \
             wget \
             libncurses5 \
