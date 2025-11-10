@@ -62,28 +62,22 @@ jobs:
           # Ubuntu 22.04 only has Firebird 3.0, but we need 5.x for extended types
           wget https://github.com/FirebirdSQL/firebird/releases/download/v5.0.0/Firebird-5.0.0.1306-0-linux-x64.tar.gz
           tar xzf Firebird-5.0.0.1306-0-linux-x64.tar.gz
+          cd Firebird-5.0.0.1306-0-linux-x64
 
-          # Check extracted directory structure
-          ls -la Firebird-5.0.0.1306-0-linux-x64/ || echo "Directory not found"
+          # Extract the buildroot archive which contains the actual files
+          tar xzf buildroot.tar.gz
 
-          # Install only client libraries and headers (no server needed)
-          # Use full paths to avoid cd issues
           # FindFirebird.cmake expects headers in /usr/include/firebird/
-          if [ -d "Firebird-5.0.0.1306-0-linux-x64/include" ]; then
-            sudo mkdir -p /usr/include/firebird
-            sudo cp -r Firebird-5.0.0.1306-0-linux-x64/include/* /usr/include/firebird/
-            echo "✓ Copied Firebird headers to /usr/include/firebird/"
-          else
-            echo "Warning: include directory not found, checking alternative structure"
-            find Firebird-5.0.0.1306-0-linux-x64 -name "ibase.h" -o -name "Interface.h" || true
-          fi
+          sudo mkdir -p /usr/include/firebird
+          sudo cp -r opt/firebird/include/* /usr/include/firebird/
 
-          if [ -d "Firebird-5.0.0.1306-0-linux-x64/lib" ]; then
-            sudo cp Firebird-5.0.0.1306-0-linux-x64/lib/libfbclient.so* /usr/lib/x86_64-linux-gnu/ || true
-            echo "✓ Copied Firebird library to /usr/lib/x86_64-linux-gnu/"
-          fi
-
+          # Copy library files
+          sudo cp opt/firebird/lib/libfbclient.so* /usr/lib/x86_64-linux-gnu/
           sudo ldconfig
+
+          cd ..
+
+          echo "✓ Installed Firebird 5.0 headers and library"
 
           pip3 install conan
           conan --version
