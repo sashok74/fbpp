@@ -111,6 +111,14 @@ jobs:
           CC: ${{ matrix.compiler.cc }}
           CXX: ${{ matrix.compiler.cxx }}
         run: |
+          # Debug: Check what Conan generated
+          echo "=== CMakePresets.json content ==="
+          cat CMakePresets.json || echo "CMakePresets.json not found"
+          echo ""
+          echo "=== Available CMake presets ==="
+          cmake --list-presets || echo "No presets found"
+          echo ""
+          echo "=== Attempting to configure with preset ==="
           cmake --preset conan-$(echo "${{ matrix.build_type }}" | tr '[:upper:]' '[:lower:]') \
             -DBUILD_TESTING=ON \
             -DBUILD_EXAMPLES=ON
