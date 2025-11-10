@@ -269,6 +269,21 @@ target_link_libraries(test_cancel_operation PRIVATE
 
 gtest_discover_tests(test_cancel_operation)
 
+# Struct descriptor test
+add_executable(test_struct_descriptor
+    unit/test_struct_descriptor.cpp
+)
+
+target_link_libraries(test_struct_descriptor PRIVATE
+    fbpp
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_struct_descriptor)
+
 # Basic infrastructure tests
 set(BASIC_TEST_SOURCES
     unit/test_trace.cpp
