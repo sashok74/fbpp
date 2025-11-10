@@ -6,6 +6,7 @@
 #include <cstring>
 #include <array>
 #include <chrono>
+#include <optional>
 
 namespace fbpp::core {
 
