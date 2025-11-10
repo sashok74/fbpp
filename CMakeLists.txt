@@ -39,6 +39,7 @@ add_library(fbpp STATIC
     src/core/firebird/fb_exception.cpp
     src/core/firebird/fb_extended_types.cpp
     src/core/firebird/fb_batch.cpp
+    src/core/firebird/query_generator_service.cpp
 
     # Utilities
     src/util/trace.cpp
