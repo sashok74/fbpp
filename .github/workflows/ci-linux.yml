@@ -62,12 +62,24 @@ jobs:
           # Ubuntu 22.04 only has Firebird 3.0, but we need 5.x for extended types
           wget https://github.com/FirebirdSQL/firebird/releases/download/v5.0.0/Firebird-5.0.0.1306-0-linux-x64.tar.gz
           tar xzf Firebird-5.0.0.1306-0-linux-x64.tar.gz
-          cd Firebird-5.0.0.1306-0-linux-x64
+
+          # Check extracted directory structure
+          ls -la Firebird-5.0.0.1306-0-linux-x64/ || echo "Directory not found"
+
           # Install only client libraries and headers (no server needed)
-          sudo cp -r include/* /usr/include/
-          sudo cp lib/libfbclient.so* /usr/lib/x86_64-linux-gnu/
+          # Use full paths to avoid cd issues
+          if [ -d "Firebird-5.0.0.1306-0-linux-x64/include" ]; then
+            sudo cp -r Firebird-5.0.0.1306-0-linux-x64/include/* /usr/include/
+          else
+            echo "Warning: include directory not found, checking alternative structure"
+            find Firebird-5.0.0.1306-0-linux-x64 -name "ibase.h" -o -name "Interface.h" || true
+          fi
+
+          if [ -d "Firebird-5.0.0.1306-0-linux-x64/lib" ]; then
+            sudo cp Firebird-5.0.0.1306-0-linux-x64/lib/libfbclient.so* /usr/lib/x86_64-linux-gnu/ || true
+          fi
+
           sudo ldconfig
-          cd ..
 
           pip3 install conan
           conan --version
