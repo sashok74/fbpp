@@ -65,9 +65,22 @@ jobs:
           cd Firebird-5.0.0.1306-0-linux-x64
 
           # Extract the buildroot archive which contains the actual files
+          echo "=== Extracting buildroot.tar.gz ==="
           tar xzf buildroot.tar.gz
 
+          # Debug: Check what was extracted
+          echo "=== Content after buildroot extraction ==="
+          ls -la
+          echo ""
+          echo "=== Checking opt/firebird structure ==="
+          ls -la opt/ 2>/dev/null || echo "✗ opt/ directory not found"
+          ls -la opt/firebird/ 2>/dev/null || echo "✗ opt/firebird/ directory not found"
+          ls -la opt/firebird/include/ 2>/dev/null || echo "✗ opt/firebird/include/ directory not found"
+          ls -la opt/firebird/lib/ 2>/dev/null || echo "✗ opt/firebird/lib/ directory not found"
+          echo ""
+
           # FindFirebird.cmake expects headers in /usr/include/firebird/
+          echo "=== Copying Firebird files to system directories ==="
           sudo mkdir -p /usr/include/firebird
           sudo cp -r opt/firebird/include/* /usr/include/firebird/
 
