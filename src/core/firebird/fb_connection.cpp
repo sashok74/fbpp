@@ -472,24 +472,25 @@ Connection::QueryMetadataInfo Connection::describeQuery(const std::string& sql) 
     const std::string& actualSql = parseResult.hasNamedParams ? parseResult.convertedSql : sql;
 
     auto& env = Environment::getInstance();
-    Firebird::IStatus* raw = env.getMaster()->getStatus();
-    Firebird::ThrowStatusWrapper st(raw);
+    //Firebird::IStatus* raw = env.getMaster()->getStatus();
+    //Firebird::ThrowStatusWrapper st(raw);
 
     Firebird::IStatement* rawStmt = nullptr;
     auto tra = StartTransaction();
     try {
         rawStmt = attachment_->prepare(
-            &st,
+            &status(),
             tra->getTransaction(),
             0,
             actualSql.c_str(),
             3,
             Statement::PREPARE_PREFETCH_ALL);
     } catch (const Firebird::FbException& e) {
-        st.dispose();
+        //st.dispose();
         throw FirebirdException(e);
     }
-    st.dispose();
+    //st.dispose();
+    tra->Commit();
 
     if (!rawStmt) {
         throw FirebirdException("Failed to prepare statement for metadata inspection");
@@ -512,9 +513,7 @@ Connection::QueryMetadataInfo Connection::describeQuery(const std::string& sql) 
     } guard{this, rawStmt};
 
     try {
-        auto& stmtStatus = status();
-
-        Firebird::IMessageMetadata* inMetaRaw = rawStmt->getInputMetadata(&stmtStatus);
+        Firebird::IMessageMetadata* inMetaRaw = rawStmt->getInputMetadata(&status());
         if (inMetaRaw) {
             MessageMetadata inputWrapper(inMetaRaw);
             unsigned count = inputWrapper.getCount();
@@ -524,7 +523,7 @@ Connection::QueryMetadataInfo Connection::describeQuery(const std::string& sql) 
             }
         }
 
-        Firebird::IMessageMetadata* outMetaRaw = rawStmt->getOutputMetadata(&stmtStatus);
+        Firebird::IMessageMetadata* outMetaRaw = rawStmt->getOutputMetadata(&status());
         if (outMetaRaw) {
             MessageMetadata outputWrapper(outMetaRaw);
             unsigned count = outputWrapper.getCount();
