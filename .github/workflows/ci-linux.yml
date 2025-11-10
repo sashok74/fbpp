@@ -96,8 +96,8 @@ jobs:
           CXX: ${{ matrix.compiler.cxx }}
         run: |
           conan profile detect --force
-          # Display detected profile
-          conan profile show default
+          # Display detected profile (Conan 2.x uses no argument for default profile)
+          conan profile show
 
       - name: Install Conan dependencies
         env:
