@@ -79,10 +79,9 @@ jobs:
           ls -la opt/firebird/lib/ 2>/dev/null || echo "✗ opt/firebird/lib/ directory not found"
           echo ""
 
-          # FindFirebird.cmake expects headers in /usr/include/firebird/
+          # Copy headers to /usr/include so #include <firebird/Interface.h> works
           echo "=== Copying Firebird files to system directories ==="
-          sudo mkdir -p /usr/include/firebird
-          sudo cp -r opt/firebird/include/* /usr/include/firebird/
+          sudo cp -r opt/firebird/include/* /usr/include/
 
           # Copy library files
           sudo cp opt/firebird/lib/libfbclient.so* /usr/lib/x86_64-linux-gnu/
@@ -99,6 +98,7 @@ jobs:
           echo "=== Firebird installation check ==="
           echo "Headers:"
           ls -la /usr/include/firebird/ 2>/dev/null || echo "✗ /usr/include/firebird/ not found"
+          ls -la /usr/include/firebird/Interface.h 2>/dev/null || echo "✗ /usr/include/firebird/Interface.h not found"
           echo "Library:"
           ls -la /usr/lib/x86_64-linux-gnu/libfbclient.so* 2>/dev/null || echo "✗ libfbclient not found"
 
