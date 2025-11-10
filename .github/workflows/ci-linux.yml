@@ -68,8 +68,11 @@ jobs:
 
           # Install only client libraries and headers (no server needed)
           # Use full paths to avoid cd issues
+          # FindFirebird.cmake expects headers in /usr/include/firebird/
           if [ -d "Firebird-5.0.0.1306-0-linux-x64/include" ]; then
-            sudo cp -r Firebird-5.0.0.1306-0-linux-x64/include/* /usr/include/
+            sudo mkdir -p /usr/include/firebird
+            sudo cp -r Firebird-5.0.0.1306-0-linux-x64/include/* /usr/include/firebird/
+            echo "✓ Copied Firebird headers to /usr/include/firebird/"
           else
             echo "Warning: include directory not found, checking alternative structure"
             find Firebird-5.0.0.1306-0-linux-x64 -name "ibase.h" -o -name "Interface.h" || true
@@ -77,6 +80,7 @@ jobs:
 
           if [ -d "Firebird-5.0.0.1306-0-linux-x64/lib" ]; then
             sudo cp Firebird-5.0.0.1306-0-linux-x64/lib/libfbclient.so* /usr/lib/x86_64-linux-gnu/ || true
+            echo "✓ Copied Firebird library to /usr/lib/x86_64-linux-gnu/"
           fi
 
           sudo ldconfig
@@ -85,10 +89,11 @@ jobs:
           conan --version
 
           # Debug: Check Firebird installation
-          echo "Firebird header locations:"
-          find /usr/include -name "ibase.h" 2>/dev/null || echo "ibase.h not found"
-          find /usr/include -name "Interface.h" 2>/dev/null || echo "Interface.h not found"
-          ls -la /usr/lib/x86_64-linux-gnu/libfbclient.so* || echo "libfbclient not found"
+          echo "=== Firebird installation check ==="
+          echo "Headers:"
+          ls -la /usr/include/firebird/ 2>/dev/null || echo "✗ /usr/include/firebird/ not found"
+          echo "Library:"
+          ls -la /usr/lib/x86_64-linux-gnu/libfbclient.so* 2>/dev/null || echo "✗ libfbclient not found"
 
       - name: Setup Conan profile
         env:
