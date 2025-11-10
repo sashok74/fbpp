@@ -2,13 +2,15 @@ name: CI - Linux
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'claude/fix-cicd-pipeline-*']
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:
 
 jobs:
   build-and-test:
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
 
     strategy:
       fail-fast: false
@@ -37,6 +39,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Display compiler versions
+        run: |
+          echo "Compiler: ${{ matrix.compiler.cc }} / ${{ matrix.compiler.cxx }}"
+          ${{ matrix.compiler.cc }} --version || true
+          ${{ matrix.compiler.cxx }} --version || true
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -55,39 +63,81 @@ jobs:
           wget https://github.com/FirebirdSQL/firebird/releases/download/v5.0.0/Firebird-5.0.0.1306-0-linux-x64.tar.gz
           tar xzf Firebird-5.0.0.1306-0-linux-x64.tar.gz
           cd Firebird-5.0.0.1306-0-linux-x64
-          # Install only client libraries and headers (no server needed)
-          sudo cp -r include/* /usr/include/
-          sudo cp lib/libfbclient.so* /usr/lib/x86_64-linux-gnu/
+
+          # Extract the buildroot archive which contains the actual files
+          echo "=== Extracting buildroot.tar.gz ==="
+          tar xzf buildroot.tar.gz
+
+          # Debug: Check what was extracted
+          echo "=== Content after buildroot extraction ==="
+          ls -la
+          echo ""
+          echo "=== Checking opt/firebird structure ==="
+          ls -la opt/ 2>/dev/null || echo "✗ opt/ directory not found"
+          ls -la opt/firebird/ 2>/dev/null || echo "✗ opt/firebird/ directory not found"
+          ls -la opt/firebird/include/ 2>/dev/null || echo "✗ opt/firebird/include/ directory not found"
+          ls -la opt/firebird/lib/ 2>/dev/null || echo "✗ opt/firebird/lib/ directory not found"
+          echo ""
+
+          # FindFirebird.cmake expects headers in /usr/include/firebird/
+          echo "=== Copying Firebird files to system directories ==="
+          sudo mkdir -p /usr/include/firebird
+          sudo cp -r opt/firebird/include/* /usr/include/firebird/
+
+          # Copy library files
+          sudo cp opt/firebird/lib/libfbclient.so* /usr/lib/x86_64-linux-gnu/
           sudo ldconfig
+
           cd ..
+
+          echo "✓ Installed Firebird 5.0 headers and library"
 
           pip3 install conan
           conan --version
 
           # Debug: Check Firebird installation
-          echo "Firebird header locations:"
-          find /usr/include -name "ibase.h" 2>/dev/null || echo "ibase.h not found"
-          find /usr/include -name "Interface.h" 2>/dev/null || echo "Interface.h not found"
-          ls -la /usr/lib/x86_64-linux-gnu/libfbclient.so* || echo "libfbclient not found"
+          echo "=== Firebird installation check ==="
+          echo "Headers:"
+          ls -la /usr/include/firebird/ 2>/dev/null || echo "✗ /usr/include/firebird/ not found"
+          echo "Library:"
+          ls -la /usr/lib/x86_64-linux-gnu/libfbclient.so* 2>/dev/null || echo "✗ libfbclient not found"
 
       - name: Setup Conan profile
+        env:
+          CC: ${{ matrix.compiler.cc }}
+          CXX: ${{ matrix.compiler.cxx }}
         run: |
           conan profile detect --force
+          # Display detected profile (Conan 2.x uses no argument for default profile)
           conan profile show
+
+      - name: Install Conan dependencies
+        env:
+          CC: ${{ matrix.compiler.cc }}
+          CXX: ${{ matrix.compiler.cxx }}
+        run: |
+          conan install . --build=missing -s build_type=${{ matrix.build_type }} -s compiler.cppstd=20
 
       - name: Configure CMake
         env:
           CC: ${{ matrix.compiler.cc }}
           CXX: ${{ matrix.compiler.cxx }}
         run: |
-          conan install . --build=missing -s build_type=${{ matrix.build_type }}
+          # Debug: Check what Conan generated
+          echo "=== CMakePresets.json content ==="
+          cat CMakePresets.json || echo "CMakePresets.json not found"
+          echo ""
+          echo "=== Available CMake presets ==="
+          cmake --list-presets || echo "No presets found"
+          echo ""
+          echo "=== Attempting to configure with preset ==="
           cmake --preset conan-$(echo "${{ matrix.build_type }}" | tr '[:upper:]' '[:lower:]') \
             -DBUILD_TESTING=ON \
             -DBUILD_EXAMPLES=ON
 
       - name: Build
         run: |
-          cmake --build --preset conan-$(echo "${{ matrix.build_type }}" | tr '[:upper:]' '[:lower:]') -j$(nproc) -- VERBOSE=1
+          cmake --build --preset conan-$(echo "${{ matrix.build_type }}" | tr '[:upper:]' '[:lower:]')
 
       - name: Run tests
         env:
@@ -115,7 +165,9 @@ jobs:
           timeout 10 bash -c 'until echo > /dev/tcp/localhost/3050; do sleep 1; done' && echo "✓ Firebird port 3050 is open" || echo "✗ Cannot connect to Firebird port 3050"
 
           # Run tests with environment variable overrides
-          ctest --preset conan-$(echo "${{ matrix.build_type }}" | tr '[:upper:]' '[:lower:]') --output-on-failure --verbose
+          # Conan with cmake_layout creates build/<build_type> directory
+          cd build/${{ matrix.build_type }}
+          ctest --output-on-failure --verbose
 
       - name: Check formatting (clang-format)
         if: matrix.compiler.cxx == 'clang++-14' && matrix.build_type == 'Release'
