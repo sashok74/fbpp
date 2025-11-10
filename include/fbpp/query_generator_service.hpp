@@ -3,7 +3,6 @@
 #include "fbpp/core/connection.hpp"
 #include "fbpp/core/message_metadata.hpp"
 
-#include <filesystem>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -13,12 +12,6 @@ namespace fbpp::core {
 struct QueryDefinition {
     std::string name;
     std::string sql;
-};
-
-struct QueryGeneratorConfig {
-    std::vector<QueryDefinition> queries;
-    std::filesystem::path outputHeader;
-    std::filesystem::path supportHeader;
 };
 
 struct TypeMapping {
@@ -49,13 +42,13 @@ public:
     explicit QueryGeneratorService(Connection& connection);
 
     std::vector<QuerySpec> buildQuerySpecs(const std::vector<QueryDefinition>& definitions) const;
-    void writeHeaders(const std::vector<QuerySpec>& specs,
-                      const std::filesystem::path& outputHeader,
-                      const std::filesystem::path& supportHeader) const;
-    void generate(const QueryGeneratorConfig& config) const;
 
 private:
     Connection& connection_;
 };
+
+std::string renderQueryGeneratorMainHeader(const std::vector<QuerySpec>& specs,
+                                           std::string_view supportHeaderName);
+std::string renderQueryGeneratorSupportHeader(const std::vector<QuerySpec>& specs);
 
 } // namespace fbpp::core

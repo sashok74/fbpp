@@ -5,10 +5,7 @@
 
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
 #include <format>
-#include <fstream>
-#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -192,9 +189,8 @@ std::string makeStructName(const std::string& queryName, bool isInput) {
     return queryName + (isInput ? "In" : "Out");
 }
 
-void writeMainHeader(const std::filesystem::path& path,
-                     const std::string& supportHeaderName,
-                     const std::vector<QuerySpec>& queries) {
+std::string renderMainHeader(const std::vector<QuerySpec>& queries,
+                             std::string_view supportHeaderName) {
     bool needsOptional = false;
     bool needsString = false;
     bool needsExtended = false;
@@ -212,10 +208,7 @@ void writeMainHeader(const std::filesystem::path& path,
         }
     }
 
-    std::ofstream out(path);
-    if (!out) {
-        throw std::runtime_error("Failed to open output header: " + path.string());
-    }
+    std::ostringstream out;
 
     out << "#pragma once\n\n";
     out << "#include <cstdint>\n";
@@ -286,15 +279,12 @@ void writeMainHeader(const std::filesystem::path& path,
 
     out << "} // namespace generated::queries\n";
     out << "\n#include \"" << supportHeaderName << "\"\n";
+
+    return out.str();
 }
 
-void writeSupportHeader(const std::filesystem::path& path,
-                        const std::vector<QuerySpec>& queries) {
-    std::ofstream out(path);
-    if (!out) {
-        throw std::runtime_error("Failed to open support header: " + path.string());
-    }
-
+std::string renderSupportHeader(const std::vector<QuerySpec>& queries) {
+    std::ostringstream out;
     out << "#pragma once\n\n";
     out << "#include <tuple>\n";
     out << "#include <utility>\n";
@@ -340,6 +330,8 @@ void writeSupportHeader(const std::filesystem::path& path,
     }
 
     out << "} // namespace fbpp::core\n";
+
+    return out.str();
 }
 
 } // namespace
@@ -373,32 +365,13 @@ std::vector<QuerySpec> QueryGeneratorService::buildQuerySpecs(const std::vector<
     return querySpecs;
 }
 
-void QueryGeneratorService::writeHeaders(const std::vector<QuerySpec>& specs,
-                                         const std::filesystem::path& outputHeader,
-                                         const std::filesystem::path& supportHeader) const {
-    if (outputHeader.empty() || supportHeader.empty()) {
-        throw std::invalid_argument("Header output paths must not be empty.");
-    }
-
-    auto ensureParent = [](const std::filesystem::path& filePath) {
-        auto parent = filePath.parent_path();
-        if (!parent.empty()) {
-            std::filesystem::create_directories(parent);
-        }
-    };
-
-    ensureParent(outputHeader);
-    ensureParent(supportHeader);
-
-    const auto supportHeaderName = supportHeader.filename().string();
-
-    writeMainHeader(outputHeader, supportHeaderName, specs);
-    writeSupportHeader(supportHeader, specs);
+std::string renderQueryGeneratorMainHeader(const std::vector<QuerySpec>& specs,
+                                           std::string_view supportHeaderName) {
+    return renderMainHeader(specs, supportHeaderName);
 }
 
-void QueryGeneratorService::generate(const QueryGeneratorConfig& config) const {
-    auto specs = buildQuerySpecs(config.queries);
-    writeHeaders(specs, config.outputHeader, config.supportHeader);
+std::string renderQueryGeneratorSupportHeader(const std::vector<QuerySpec>& specs) {
+    return renderSupportHeader(specs);
 }
 
 } // namespace fbpp::core

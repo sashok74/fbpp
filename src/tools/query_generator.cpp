@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -13,8 +14,9 @@ using fbpp::core::Connection;
 using fbpp::core::ConnectionParams;
 using fbpp::core::FirebirdException;
 using fbpp::core::QueryDefinition;
-using fbpp::core::QueryGeneratorConfig;
 using fbpp::core::QueryGeneratorService;
+using fbpp::core::renderQueryGeneratorMainHeader;
+using fbpp::core::renderQueryGeneratorSupportHeader;
 
 namespace {
 
@@ -74,6 +76,22 @@ std::optional<Options> parseOptions(int argc, char** argv) {
     return opts;
 }
 
+void ensureParentDir(const std::filesystem::path& filePath) {
+    auto parent = filePath.parent_path();
+    if (!parent.empty()) {
+        std::filesystem::create_directories(parent);
+    }
+}
+
+void writeToFile(const std::filesystem::path& filePath, const std::string& contents) {
+    ensureParentDir(filePath);
+    std::ofstream out(filePath, std::ios::binary);
+    if (!out) {
+        throw std::runtime_error("Failed to open output file: " + filePath.string());
+    }
+    out << contents;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -116,13 +134,14 @@ int main(int argc, char** argv) {
             });
         }
 
-        QueryGeneratorConfig config{
-            .queries = std::move(definitions),
-            .outputHeader = opts.outputHeader,
-            .supportHeader = opts.supportHeader
-        };
+        const auto specs = service.buildQuerySpecs(definitions);
+        const auto supportHeaderName = opts.supportHeader.filename().string();
 
-        service.generate(config);
+        const auto mainHeader = renderQueryGeneratorMainHeader(specs, supportHeaderName);
+        const auto supportHeader = renderQueryGeneratorSupportHeader(specs);
+
+        writeToFile(opts.outputHeader, mainHeader);
+        writeToFile(opts.supportHeader, supportHeader);
 
         return 0;
     } catch (const FirebirdException& e) {
