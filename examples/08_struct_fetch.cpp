@@ -395,33 +395,43 @@ namespace fbpp::core {
 
 template<>
 struct StructDescriptor<::FetchInput> {
+    static constexpr bool is_specialized = true;
+    static constexpr const char* name = "FETCH_INPUT";
+
     static constexpr auto fields = std::make_tuple();
+
+    static constexpr size_t fieldCount = std::tuple_size_v<decltype(fields)>;
 };
 
 template<>
 struct StructDescriptor<::TableRow> {
+    static constexpr bool is_specialized = true;
+    static constexpr const char* name = "TABLE_ROW";
+
     static constexpr auto fields = std::make_tuple(
-        makeField<&TableRow::id>("ID", SQL_LONG, 0, sizeof(std::int32_t), false),
-        makeField<&TableRow::fBigint>("F_BIGINT", SQL_INT64, 0, sizeof(std::int64_t), true),
-        makeField<&TableRow::fBoolean>("F_BOOLEAN", SQL_BOOLEAN, 0, 1, true),
-        makeField<&TableRow::fChar>("F_CHAR", SQL_TEXT, 0, 10, true),
-        makeField<&TableRow::fDate>("F_DATE", SQL_TYPE_DATE, 0, sizeof(uint32_t), true),
-        makeField<&TableRow::fDecfloat>("F_DECFLOAT", SQL_DEC34, 0, 16, true),
-        makeField<&TableRow::fDecimal>("F_DECIMAL", SQL_INT128, ::kDecimalScale, 16, true),
-        makeField<&TableRow::fDoublePrecision>("F_DOUBLE_PRECISION", SQL_DOUBLE, 0, sizeof(double), true),
-        makeField<&TableRow::fFloat>("F_FLOAT", SQL_FLOAT, 0, sizeof(float), true),
-        makeField<&TableRow::fInt128>("F_INT128", SQL_INT128, 0, 16, true),
-        makeField<&TableRow::fInteger>("F_INTEGER", SQL_LONG, 0, sizeof(std::int32_t), true),
-        makeField<&TableRow::fNumeric>("F_NUMERIC", SQL_INT64, ::kNumericScale, sizeof(std::int64_t), true),
-        makeField<&TableRow::fSmalint>("F_SMALINT", SQL_SHORT, 0, sizeof(std::int16_t), true),
-        makeField<&TableRow::fTime>("F_TIME", SQL_TYPE_TIME, 0, sizeof(uint32_t), true),
-        makeField<&TableRow::fTimeTz>("F_TIME_TZ", SQL_TIME_TZ, 0, 8, true),
-        makeField<&TableRow::fTimestamp>("F_TIMESHTAMP", SQL_TIMESTAMP, 0, 8, true),
-        makeField<&TableRow::fTimestampTz>("F_TIMESHTAMP_TZ", SQL_TIMESTAMP_TZ, 0, 12, true),
-        makeField<&TableRow::fVarchar>("F_VARCHAR", SQL_VARYING, 0, 66, true),
-        makeField<&TableRow::fBlobBinary>("F_BLOB_B", SQL_BLOB, 0, 8, true),
-        makeField<&TableRow::fBlobText>("F_BLOB_T", SQL_BLOB, 0, 8, true, 1),
-        makeField<&TableRow::fNull>("F_NULL", SQL_LONG, 0, sizeof(std::int32_t), true));
+        makeField<&TableRow::id>("ID", SQL_LONG, 0, sizeof(std::int32_t), 0, false),
+        makeField<&TableRow::fBigint>("F_BIGINT", SQL_INT64, 0, sizeof(std::int64_t), 0, true),
+        makeField<&TableRow::fBoolean>("F_BOOLEAN", SQL_BOOLEAN, 0, 1, 0, true),
+        makeField<&TableRow::fChar>("F_CHAR", SQL_TEXT, 0, 10, 0, true),
+        makeField<&TableRow::fDate>("F_DATE", SQL_TYPE_DATE, 0, sizeof(uint32_t), 0, true),
+        makeField<&TableRow::fDecfloat>("F_DECFLOAT", SQL_DEC34, 0, 16, 0, true),
+        makeField<&TableRow::fDecimal>("F_DECIMAL", SQL_INT128, ::kDecimalScale, 16, 0, true),
+        makeField<&TableRow::fDoublePrecision>("F_DOUBLE_PRECISION", SQL_DOUBLE, 0, sizeof(double), 0, true),
+        makeField<&TableRow::fFloat>("F_FLOAT", SQL_FLOAT, 0, sizeof(float), 0, true),
+        makeField<&TableRow::fInt128>("F_INT128", SQL_INT128, 0, 16, 0, true),
+        makeField<&TableRow::fInteger>("F_INTEGER", SQL_LONG, 0, sizeof(std::int32_t), 0, true),
+        makeField<&TableRow::fNumeric>("F_NUMERIC", SQL_INT64, ::kNumericScale, sizeof(std::int64_t), 0, true),
+        makeField<&TableRow::fSmalint>("F_SMALINT", SQL_SHORT, 0, sizeof(std::int16_t), 0, true),
+        makeField<&TableRow::fTime>("F_TIME", SQL_TYPE_TIME, 0, sizeof(uint32_t), 0, true),
+        makeField<&TableRow::fTimeTz>("F_TIME_TZ", SQL_TIME_TZ, 0, 8, 0, true),
+        makeField<&TableRow::fTimestamp>("F_TIMESHTAMP", SQL_TIMESTAMP, 0, 8, 0, true),
+        makeField<&TableRow::fTimestampTz>("F_TIMESHTAMP_TZ", SQL_TIMESTAMP_TZ, 0, 12, 0, true),
+        makeField<&TableRow::fVarchar>("F_VARCHAR", SQL_VARYING, 0, 66, 0, true),
+        makeField<&TableRow::fBlobBinary>("F_BLOB_B", SQL_BLOB, 0, 8, 0, true),
+        makeField<&TableRow::fBlobText>("F_BLOB_T", SQL_BLOB, 0, 8, 1, true),
+        makeField<&TableRow::fNull>("F_NULL", SQL_LONG, 0, sizeof(std::int32_t), 0, true));
+
+    static constexpr size_t fieldCount = std::tuple_size_v<decltype(fields)>;
 };
 
 } // namespace fbpp::core
