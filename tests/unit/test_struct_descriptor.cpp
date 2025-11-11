@@ -22,13 +22,13 @@ struct fbpp::core::StructDescriptor<SimpleStruct> {
     static constexpr bool is_specialized = true;
     static constexpr const char* name = "SIMPLE_STRUCT";
 
-    static constexpr auto fields = std::array{
+    static constexpr auto fields = std::tuple{
         detail::makeField(&SimpleStruct::id,    "ID",    SQL_INT64,   0, 8, 0, false, false),
         detail::makeField(&SimpleStruct::name,  "NAME",  SQL_VARYING, 0, 258, 0, false, false),
         detail::makeField(&SimpleStruct::value, "VALUE", SQL_DOUBLE,  0, 8, 0, true, false)
     };
 
-    static constexpr size_t fieldCount = fields.size();
+    static constexpr size_t fieldCount = std::tuple_size_v<decltype(fields)>;
 };
 
 struct PersonStruct {
@@ -41,12 +41,12 @@ struct fbpp::core::StructDescriptor<PersonStruct> {
     static constexpr bool is_specialized = true;
     static constexpr const char* name = "PERSON";
 
-    static constexpr auto fields = std::array{
+    static constexpr auto fields = std::tuple{
         detail::makeField(&PersonStruct::id,    "ID",    SQL_LONG,    0, 4, 0, false, false),
         detail::makeField(&PersonStruct::email, "EMAIL", SQL_VARYING, 0, 258, 0, true, false)
     };
 
-    static constexpr size_t fieldCount = fields.size();
+    static constexpr size_t fieldCount = std::tuple_size_v<decltype(fields)>;
 };
 
 // Struct without descriptor
@@ -91,7 +91,7 @@ TEST(StructDescriptor, IsStructPackableTrait) {
     // Not struct-packable
     EXPECT_FALSE(is_struct_packable_v<UnknownStruct>);
     EXPECT_FALSE(is_struct_packable_v<int>);
-    EXPECT_FALSE(is_struct_packable_v<std::tuple<int, std::string>>);
+    EXPECT_FALSE((is_struct_packable_v<std::tuple<int, std::string>>));  // Parentheses for macro
     // Note: nlohmann::json check would require including json header
 }
 
@@ -200,10 +200,10 @@ TEST(StructDescriptor, DescriptorProperties) {
 
 TEST(StructDescriptor, FieldCount) {
     constexpr auto& simpleFields = StructDescriptor<SimpleStruct>::fields;
-    EXPECT_EQ(simpleFields.size(), 3);
+    EXPECT_EQ(std::tuple_size_v<decltype(simpleFields)>, 3);
 
     constexpr auto& personFields = StructDescriptor<PersonStruct>::fields;
-    EXPECT_EQ(personFields.size(), 2);
+    EXPECT_EQ(std::tuple_size_v<decltype(personFields)>, 2);
 }
 
 TEST(StructDescriptor, FieldIteration) {
@@ -307,7 +307,7 @@ TEST(StructDescriptor, CompilationChecks) {
 
     // Verify constexpr context works
     constexpr auto& desc = StructDescriptor<SimpleStruct>::fields;
-    constexpr size_t count = desc.size();
+    constexpr size_t count = std::tuple_size_v<decltype(desc)>;
     static_assert(count == 3);
 
     SUCCEED();  // If we get here, compilation succeeded

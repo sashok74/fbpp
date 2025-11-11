@@ -310,6 +310,49 @@ void unpackStructImpl(
 } // namespace detail
 
 // ============================================================================
+// Public API - Export makeField to fbpp::core namespace
+// ============================================================================
+
+/**
+ * @brief Create field descriptor (non-template version)
+ *
+ * Public API for explicit field descriptor creation
+ */
+template<typename T, typename FieldType>
+constexpr detail::FieldDescriptor<T, FieldType> makeField(
+    FieldType T::* memberPtr,
+    const char* sqlName,
+    unsigned sqlType,
+    int16_t scale = 0,
+    unsigned length = 0,
+    unsigned subType = 0,
+    bool nullable = false,
+    bool useAdapter = false
+) {
+    return detail::makeField(memberPtr, sqlName, sqlType, scale,
+                            length, subType, nullable, useAdapter);
+}
+
+/**
+ * @brief Create field descriptor with auto deduction
+ *
+ * Public API: makeField<&Struct::field>("NAME", SQL_TYPE)
+ */
+template<auto MemberPtr>
+constexpr auto makeField(
+    const char* sqlName,
+    unsigned sqlType,
+    int16_t scale = 0,
+    unsigned length = 0,
+    unsigned subType = 0,
+    bool nullable = false,
+    bool useAdapter = false
+) {
+    return detail::makeField<MemberPtr>(sqlName, sqlType, scale,
+                                       length, subType, nullable, useAdapter);
+}
+
+// ============================================================================
 // StructDescriptor Base Template
 // ============================================================================
 
@@ -329,12 +372,12 @@ void unpackStructImpl(
  *     static constexpr bool is_specialized = true;
  *     static constexpr const char* name = "MY_STRUCT";
  *
- *     static constexpr auto fields = std::array{
- *         makeField(&MyStruct::id,   "ID",   SQL_INT64,   0, 8),
- *         makeField(&MyStruct::name, "NAME", SQL_VARYING, 0, 256)
+ *     static constexpr auto fields = std::tuple{
+ *         detail::makeField(&MyStruct::id,   "ID",   SQL_INT64,   0, 8),
+ *         detail::makeField(&MyStruct::name, "NAME", SQL_VARYING, 0, 256)
  *     };
  *
- *     static constexpr size_t fieldCount = fields.size();
+ *     static constexpr size_t fieldCount = std::tuple_size_v<decltype(fields)>;
  * };
  * @endcode
  */
