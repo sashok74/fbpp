@@ -49,7 +49,7 @@ struct TableRow {
     std::optional<TimestampTz> fTimestampTz;
     std::optional<std::string> fVarchar;
     std::optional<Blob> fBlobBinary;
-    std::optional<TextBlob> fBlobText;
+    std::optional<std::string> fBlobText;  // TEXT BLOB автоматически читается в строку
     std::optional<std::int32_t> fNull;
 };
 
@@ -371,22 +371,16 @@ std::string formatOptionalBlob(const std::optional<Blob>& value) {
     return "Blob{id=" + formatBlobIdString(*value) + "}";
 }
 
-std::string formatOptionalTextBlob(const std::optional<TextBlob>& value) {
+std::string formatOptionalTextBlob(const std::optional<std::string>& value) {
     if (!value) {
         return "null";
     }
-    std::ostringstream oss;
-    oss << "TextBlob{id=" << formatBlobIdString(*value)
-        << ", cached=" << (value->hasText() ? "true" : "false");
-    if (value->hasText()) {
-        std::string preview = value->getText();
-        if (preview.size() > 32) {
-            preview = preview.substr(0, 32) + "...";
-        }
-        oss << ", text=" << quoteString(preview);
+    // TEXT BLOB уже загружен в строку, просто показываем превью
+    std::string preview = *value;
+    if (preview.size() > 64) {
+        preview = preview.substr(0, 64) + "...";
     }
-    oss << '}';
-    return oss.str();
+    return quoteString(preview);
 }
 
 } // namespace
