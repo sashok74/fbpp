@@ -38,6 +38,7 @@ struct ExtendedTypesInsertInput {
     ZonedMicroTime fTimestampTz;
     TimeWithTz fTimeTz;
     std::string fVarchar;
+    std::string fBlobText;  // TEXT BLOB автоматически сохраняется из строки
 };
 
 struct ExtendedTypesFetchInput {
@@ -56,6 +57,7 @@ struct ExtendedTypesOutput {
     std::optional<ZonedMicroTime> fTimestampTz;
     std::optional<TimeWithTz> fTimeTz;
     std::optional<std::string> fVarchar;
+    std::optional<std::string> fBlobText;  // TEXT BLOB автоматически читается в строку
 };
 
 ConnectionParams loadConnectionParams() {
@@ -128,7 +130,8 @@ ExtendedTypesInsertInput makeSampleRow(int32_t newId) {
         timestampMicros,
         timestampTz,
         timeTz,
-        "extended_struct_demo"
+        "extended_struct_demo",
+        "This is TEXT BLOB content with UTF-8 support: Привет мир! 🚀"
     };
 }
 
@@ -324,6 +327,23 @@ std::string formatOptionalDecFloat(const std::optional<DecFloat34>& value) {
     return value->to_string();
 }
 
+std::string formatOptionalTextBlob(const std::optional<std::string>& value) {
+    if (!value) {
+        return "null";
+    }
+    // TEXT BLOB уже загружен в строку, показываем длину и превью
+    const auto& text = *value;
+    std::ostringstream oss;
+    oss << "\"" << text.size() << " bytes: ";
+    if (text.size() > 50) {
+        oss << text.substr(0, 50) << "...";
+    } else {
+        oss << text;
+    }
+    oss << "\"";
+    return oss.str();
+}
+
 void printResult(const ExtendedTypesOutput& row) {
     std::cout << "\nFetched row id=" << row.id << '\n';
     std::cout << "  F_INT128: " << formatOptionalInt128(row.fInt128, 0) << '\n';
@@ -336,6 +356,7 @@ void printResult(const ExtendedTypesOutput& row) {
     std::cout << "  F_TIMESHTAMP_TZ: " << formatOptionalZonedTime(row.fTimestampTz) << '\n';
     std::cout << "  F_TIME_TZ: " << formatOptionalTimeWithTz(row.fTimeTz) << '\n';
     std::cout << "  F_VARCHAR: " << (row.fVarchar ? *row.fVarchar : "null") << '\n';
+    std::cout << "  F_BLOB_T: " << formatOptionalTextBlob(row.fBlobText) << '\n';
 }
 
 } // namespace
@@ -358,7 +379,8 @@ struct StructDescriptor<::ExtendedTypesInsertInput> {
         makeField<&ExtendedTypesInsertInput::fTimestamp>("F_TIMESHTAMP", SQL_TIMESTAMP, 0, 8, 0, false),
         makeField<&ExtendedTypesInsertInput::fTimestampTz>("F_TIMESHTAMP_TZ", SQL_TIMESTAMP_TZ, 0, 12, 0, false),
         makeField<&ExtendedTypesInsertInput::fTimeTz>("F_TIME_TZ", SQL_TIME_TZ, 0, 8, 0, false),
-        makeField<&ExtendedTypesInsertInput::fVarchar>("F_VARCHAR", SQL_VARYING, 0, 66, 0, false)
+        makeField<&ExtendedTypesInsertInput::fVarchar>("F_VARCHAR", SQL_VARYING, 0, 66, 0, false),
+        makeField<&ExtendedTypesInsertInput::fBlobText>("F_BLOB_T", SQL_BLOB, 0, 8, 1, false)  // subType=1 для TEXT BLOB
     );
 
     static constexpr size_t fieldCount = std::tuple_size_v<decltype(fields)>;
@@ -392,7 +414,8 @@ struct StructDescriptor<::ExtendedTypesOutput> {
         makeField<&ExtendedTypesOutput::fTimestamp>("F_TIMESHTAMP", SQL_TIMESTAMP, 0, 8, 0, true),
         makeField<&ExtendedTypesOutput::fTimestampTz>("F_TIMESHTAMP_TZ", SQL_TIMESTAMP_TZ, 0, 12, 0, true),
         makeField<&ExtendedTypesOutput::fTimeTz>("F_TIME_TZ", SQL_TIME_TZ, 0, 8, 0, true),
-        makeField<&ExtendedTypesOutput::fVarchar>("F_VARCHAR", SQL_VARYING, 0, 66, 0, true)
+        makeField<&ExtendedTypesOutput::fVarchar>("F_VARCHAR", SQL_VARYING, 0, 66, 0, true),
+        makeField<&ExtendedTypesOutput::fBlobText>("F_BLOB_T", SQL_BLOB, 0, 8, 1, true)  // subType=1 для TEXT BLOB
     );
 
     static constexpr size_t fieldCount = std::tuple_size_v<decltype(fields)>;
@@ -412,9 +435,9 @@ struct QueryDescriptor<QueryId::InsertExtended> {
     static constexpr std::string_view sql =
         "INSERT INTO TABLE_TEST_1 ("
         "ID, F_INT128, F_DECIMAL, F_NUMERIC, F_DECFLOAT, "
-        "F_DATE, F_TIME, F_TIMESHTAMP, F_TIMESHTAMP_TZ, F_TIME_TZ, F_VARCHAR"
+        "F_DATE, F_TIME, F_TIMESHTAMP, F_TIMESHTAMP_TZ, F_TIME_TZ, F_VARCHAR, F_BLOB_T"
         ") VALUES (:id, :fInt128, :fDecimal, :fNumeric, :fDecfloat, "
-        ":fDate, :fTime, :fTimestamp, :fTimestampTz, :fTimeTz, :fVarchar)";
+        ":fDate, :fTime, :fTimestamp, :fTimestampTz, :fTimeTz, :fVarchar, :fBlobText)";
     using Input = ExtendedTypesInsertInput;
     using Output = fbpp::core::NoResult;
 };
@@ -423,7 +446,7 @@ template<>
 struct QueryDescriptor<QueryId::FetchExtended> {
     static constexpr std::string_view sql =
         "SELECT ID, F_INT128, F_DECIMAL, F_NUMERIC, F_DECFLOAT, "
-        "F_DATE, F_TIME, F_TIMESHTAMP, F_TIMESHTAMP_TZ, F_TIME_TZ, F_VARCHAR "
+        "F_DATE, F_TIME, F_TIMESHTAMP, F_TIMESHTAMP_TZ, F_TIME_TZ, F_VARCHAR, F_BLOB_T "
         "FROM TABLE_TEST_1 WHERE ID = :id";
     using Input = ExtendedTypesFetchInput;
     using Output = ExtendedTypesOutput;
