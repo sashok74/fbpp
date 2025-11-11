@@ -9,6 +9,7 @@ set(EXAMPLE_SOURCES
     03_batch_simple.cpp         # Simple batch operations demonstration
     04_batch_advanced.cpp       # Advanced batch with TTMath/CppDecimal support
     08_struct_fetch.cpp         # Struct-based fetch demonstration
+    09_extended_types_struct.cpp # Extended types with struct packer/unpacker demonstration
     06_named_parameters.cpp     # Named parameters support demonstration
     07_cancel_operation.cpp     # Multi-threaded cancelOperation() API demonstration
     07_cancel_test_variants.cpp  # Test transaction memory leak
