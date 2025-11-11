@@ -6,6 +6,7 @@
 #include "fbpp/core/firebird_compat.hpp"
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/type_adapter.hpp"
+#include "fbpp/core/type_traits.hpp"  // For is_tuple_v, is_json_v
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -113,6 +114,24 @@ constexpr FieldDescriptor<T, FieldType> makeField(
     };
 }
 
+// ============================================================================
+// Member Pointer Traits Helper
+// ============================================================================
+
+/**
+ * @brief Helper trait to extract struct and field types from member pointer
+ *
+ * Specialization for member pointers: FieldType StructType::*
+ */
+template<typename>
+struct member_pointer_traits;
+
+template<typename Struct, typename Field>
+struct member_pointer_traits<Field Struct::*> {
+    using struct_type = Struct;
+    using field_type = Field;
+};
+
 /**
  * @brief Create field descriptor with auto member pointer deduction
  *
@@ -128,20 +147,10 @@ constexpr auto makeField(
     bool nullable = false,
     bool useAdapter = false
 ) {
-    // Extract types from member pointer
-    using PtrType = decltype(MemberPtr);
-
-    // Member pointer type is: FieldType StructType::*
-    // We need to extract both types
-    using StructType = typename std::remove_cv_t<
-        typename std::pointer_traits<std::add_pointer_t<PtrType>>::element_type
-    >;
-
-    // This is a bit tricky - we need to deduce FieldType from member pointer
-    // Use helper to extract it
-    using FieldType = std::remove_reference_t<decltype(
-        std::declval<StructType&>().*MemberPtr
-    )>;
+    // Extract types from member pointer using specialized trait
+    using Traits = member_pointer_traits<decltype(MemberPtr)>;
+    using StructType = typename Traits::struct_type;
+    using FieldType = typename Traits::field_type;
 
     return FieldDescriptor<StructType, FieldType>{
         sqlName, sqlType, scale, length, subType,
