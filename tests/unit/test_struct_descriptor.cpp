@@ -1,7 +1,9 @@
 #include "fbpp/core/struct_descriptor.hpp"
 #include "fbpp/core/firebird_compat.hpp"
 #include <gtest/gtest.h>
+#include <array>
 #include <optional>
+#include <type_traits>
 #include <string>
 
 using namespace fbpp::core;
@@ -28,7 +30,7 @@ struct fbpp::core::StructDescriptor<SimpleStruct> {
         detail::makeField(&SimpleStruct::value, "VALUE", SQL_DOUBLE,  0, 8, 0, true, false)
     };
 
-    static constexpr size_t fieldCount = std::tuple_size_v<decltype(fields)>;
+    static constexpr size_t fieldCount = std::tuple_size_v<std::remove_reference_t<decltype(fields)>>;
 };
 
 struct PersonStruct {
@@ -46,7 +48,7 @@ struct fbpp::core::StructDescriptor<PersonStruct> {
         detail::makeField(&PersonStruct::email, "EMAIL", SQL_VARYING, 0, 258, 0, true, false)
     };
 
-    static constexpr size_t fieldCount = std::tuple_size_v<decltype(fields)>;
+    static constexpr size_t fieldCount = std::tuple_size_v<std::remove_reference_t<decltype(fields)>>;
 };
 
 // Struct without descriptor
@@ -168,14 +170,14 @@ TEST(FieldDescriptor, OptionalFieldDetection) {
     constexpr auto& fields = StructDescriptor<SimpleStruct>::fields;
 
     // Non-optional fields
-    using Field0Type = decltype(std::get<0>(fields));
+    using Field0Type = std::remove_cvref_t<decltype(std::get<0>(fields))>;
     EXPECT_FALSE(Field0Type::is_optional_field);
 
-    using Field1Type = decltype(std::get<1>(fields));
+    using Field1Type = std::remove_cvref_t<decltype(std::get<1>(fields))>;
     EXPECT_FALSE(Field1Type::is_optional_field);
 
     // Optional field
-    using Field2Type = decltype(std::get<2>(fields));
+    using Field2Type = std::remove_cvref_t<decltype(std::get<2>(fields))>;
     EXPECT_TRUE(Field2Type::is_optional_field);
 }
 
@@ -200,22 +202,37 @@ TEST(StructDescriptor, DescriptorProperties) {
 
 TEST(StructDescriptor, FieldCount) {
     constexpr auto& simpleFields = StructDescriptor<SimpleStruct>::fields;
-    EXPECT_EQ(std::tuple_size_v<decltype(simpleFields)>, 3);
+    EXPECT_EQ(std::tuple_size_v<std::remove_reference_t<decltype(simpleFields)>>, 3);
 
     constexpr auto& personFields = StructDescriptor<PersonStruct>::fields;
-    EXPECT_EQ(std::tuple_size_v<decltype(personFields)>, 2);
+    EXPECT_EQ(std::tuple_size_v<std::remove_reference_t<decltype(personFields)>>, 2);
 }
 
 TEST(StructDescriptor, FieldIteration) {
     constexpr auto& fields = StructDescriptor<SimpleStruct>::fields;
 
-    // Expected field names
-    const char* expectedNames[] = {"ID", "NAME", "VALUE"};
-    unsigned expectedTypes[] = {SQL_INT64, SQL_VARYING, SQL_DOUBLE};
+    using FieldsTuple = std::decay_t<decltype(fields)>;
+    constexpr std::size_t fieldCount = std::tuple_size_v<FieldsTuple>;
 
-    for (size_t i = 0; i < fields.size(); ++i) {
-        const auto& field = std::get<0>(fields);  // Get by compile-time index
-        // Note: This is simplified - real iteration would need template recursion
+    const std::array<const char*, fieldCount> expectedNames{"ID", "NAME", "VALUE"};
+    const std::array<unsigned, fieldCount> expectedTypes{SQL_INT64, SQL_VARYING, SQL_DOUBLE};
+
+    std::array<const char*, fieldCount> actualNames{};
+    std::array<unsigned, fieldCount> actualTypes{};
+
+    std::size_t idx = 0;
+    std::apply(
+        [&](const auto&... field) {
+            ((actualNames[idx] = field.sqlName,
+              actualTypes[idx] = field.sqlType,
+              ++idx), ...);
+        },
+        fields
+    );
+
+    for (std::size_t i = 0; i < fieldCount; ++i) {
+        EXPECT_STREQ(expectedNames[i], actualNames[i]);
+        EXPECT_EQ(expectedTypes[i], actualTypes[i]);
     }
 
     // Verify specific fields
@@ -307,7 +324,7 @@ TEST(StructDescriptor, CompilationChecks) {
 
     // Verify constexpr context works
     constexpr auto& desc = StructDescriptor<SimpleStruct>::fields;
-    constexpr size_t count = std::tuple_size_v<decltype(desc)>;
+    constexpr size_t count = std::tuple_size_v<std::remove_reference_t<decltype(desc)>>;
     static_assert(count == 3);
 
     SUCCEED();  // If we get here, compilation succeeded

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fbpp/core/detail/struct_pack.hpp"
+#include "fbpp/core/struct_descriptor.hpp"
 #include "fbpp/core/message_metadata.hpp"
 #include "fbpp/core/type_traits.hpp"
 #include "fbpp/core/tuple_packer.hpp"
@@ -28,8 +28,8 @@ inline void pack(const T& data,
                  uint8_t* buffer,
                  const MessageMetadata* metadata,
                  Transaction* transaction = nullptr) {
-    if constexpr (detail::has_struct_descriptor_v<T>) {
-        detail::packStruct(data, buffer, metadata, transaction);
+    if constexpr (is_struct_packable_v<T>) {
+        packStruct(data, buffer, metadata, transaction);
     }
     else if constexpr (is_tuple_v<T>) {
         // For tuple - use TuplePacker with proper template arguments
@@ -52,11 +52,11 @@ template<typename T, typename Enable = void>
 struct UnpackerHelper;
 
 template<typename T>
-struct UnpackerHelper<T, std::enable_if_t<detail::has_struct_descriptor_v<T>>> {
+struct UnpackerHelper<T, std::enable_if_t<is_struct_packable_v<T>>> {
     static T unpack(const uint8_t* buffer,
                     const MessageMetadata* metadata,
                     Transaction* transaction) {
-        return detail::unpackStruct<T>(buffer, metadata, transaction);
+        return unpackStruct<T>(buffer, metadata, transaction);
     }
 };
 
@@ -81,7 +81,7 @@ struct UnpackerHelper<nlohmann::json, void> {
 };
 
 template<typename T>
-struct UnpackerHelper<T, std::enable_if_t<!detail::has_struct_descriptor_v<T> && !is_tuple_v<T> && !is_json_v<T>>> {
+struct UnpackerHelper<T, std::enable_if_t<!is_struct_packable_v<T> && !is_tuple_v<T> && !is_json_v<T>>> {
     static T unpack(const uint8_t*,
                     const MessageMetadata*,
                     Transaction*) {

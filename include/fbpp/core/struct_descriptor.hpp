@@ -172,13 +172,29 @@ template<typename T>
 struct has_struct_descriptor<
     T,
     std::void_t<
-        decltype(StructDescriptor<T>::is_specialized),
         decltype(StructDescriptor<T>::fields)
     >
-> : std::bool_constant<StructDescriptor<T>::is_specialized> {};
+> {
+    static constexpr bool value = [] {
+        if constexpr (requires { StructDescriptor<T>::is_specialized; }) {
+            return StructDescriptor<T>::is_specialized;
+        } else {
+            return true;
+        }
+    }();
+};
 
 template<typename T>
 inline constexpr bool has_struct_descriptor_v = has_struct_descriptor<T>::value;
+
+template<typename T>
+constexpr const char* descriptor_name() {
+    if constexpr (requires { StructDescriptor<T>::name; }) {
+        return StructDescriptor<T>::name;
+    } else {
+        return "StructDescriptor";
+    }
+}
 
 // ============================================================================
 // Pack/Unpack Field Helpers
@@ -442,13 +458,16 @@ void packStruct(
 
     // Get descriptor
     constexpr auto& fields = StructDescriptor<T>::fields;
-    constexpr std::size_t fieldCount = fields.size();
+    using FieldsTuple = std::decay_t<decltype(fields)>;
+    constexpr std::size_t fieldCount = std::tuple_size_v<FieldsTuple>;
+
+    const char* descriptorName = detail::descriptor_name<T>();
 
     // Validate field count
     if (fieldCount != metadata->getCount()) {
         throw FirebirdException(
             std::string("Field count mismatch for ") +
-            StructDescriptor<T>::name +
+            descriptorName +
             ": expected " + std::to_string(fieldCount) +
             ", got " + std::to_string(metadata->getCount())
         );
@@ -491,13 +510,16 @@ T unpackStruct(
 
     // Get descriptor
     constexpr auto& fields = StructDescriptor<T>::fields;
-    constexpr std::size_t fieldCount = fields.size();
+    using FieldsTuple = std::decay_t<decltype(fields)>;
+    constexpr std::size_t fieldCount = std::tuple_size_v<FieldsTuple>;
+
+    const char* descriptorName = detail::descriptor_name<T>();
 
     // Validate field count
     if (fieldCount != metadata->getCount()) {
         throw FirebirdException(
             std::string("Field count mismatch for ") +
-            StructDescriptor<T>::name +
+            descriptorName +
             ": expected " + std::to_string(fieldCount) +
             ", got " + std::to_string(metadata->getCount())
         );
