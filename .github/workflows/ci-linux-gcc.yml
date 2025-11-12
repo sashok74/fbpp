@@ -1,4 +1,4 @@
-name: CI - Linux GCC 11
+name: CI - Linux GCC 13
 
 on:
   push:
@@ -20,12 +20,12 @@ on:
 
 env:
   BUILD_TYPE: RelWithDebInfo
-  CC: gcc-11
-  CXX: g++-11
+  CC: gcc-13
+  CXX: g++-13
 
 jobs:
   build-and-test:
-    name: Build and Test (GCC 11, RelWithDebInfo)
+    name: Build and Test (GCC 13, RelWithDebInfo)
     runs-on: ubuntu-22.04
     timeout-minutes: 30
 
@@ -83,9 +83,9 @@ jobs:
 
           sudo apt-get install -y \
             cmake \
-            gcc-11 \
-            g++-11 \
-            libstdc++-11-dev \
+            gcc-13 \
+            g++-13 \
+            libstdc++-13-dev \
             python3-pip \
             wget \
             libncurses5 \
@@ -97,8 +97,8 @@ jobs:
           # Verify compiler installation
           echo ""
           echo "Compiler versions:"
-          gcc-11 --version | head -n1
-          g++-11 --version | head -n1
+          gcc-13 --version | head -n1
+          g++-13 --version | head -n1
           cmake --version | head -n1
 
       # ============================================
