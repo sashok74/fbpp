@@ -268,7 +268,9 @@ TEST_F(StructPackTest, ExtendedTypesRoundTripUsingStructDescriptors) {
     using namespace std::chrono_literals;
 
     const year_month_day testDate{year{2024}, month{5}, day{17}};
-    const auto timeDuration = 8h + 15min + 42s + 123456us;
+    // Firebird TIME/TIMESTAMP precision is 100 microseconds (1/10000 sec)
+    // Use time value divisible by 100 to avoid precision loss
+    const auto timeDuration = 8h + 15min + 42s + 123400us;  // Changed from 123456us
     MicroTime testTime{timeDuration};
     const sys_days baseDay{testDate};
     const auto timestampMicros = time_point_cast<microseconds>(baseDay + timeDuration);
