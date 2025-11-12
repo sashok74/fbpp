@@ -45,8 +45,11 @@ TEST_F(QueryGeneratorTest, GeneratesHeadersForSelect) {
 #endif
     ASSERT_TRUE(fs::exists(generatorExe)) << "query_generator executable not found";
 
+    // Get DSN from environment or use persistent DB params
+    std::string dsn = db_params_.database; // Uses PersistentDatabaseTest connection params
+
     std::string command = "\"" + generatorExe.string() + "\" " +
-        "--dsn firebird5:testdb "
+        "--dsn \"" + dsn + "\" "
         "--user SYSDBA "
         "--password planomer "
         "--charset UTF8 "

@@ -1,0 +1,451 @@
+name: CI - Linux GCC 13
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'claude/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      debug_mode:
+        description: 'Enable verbose debug output'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  BUILD_TYPE: RelWithDebInfo
+  CC: gcc-13
+  CXX: g++-13
+
+jobs:
+  build-and-test:
+    name: Build and Test (GCC 13, RelWithDebInfo)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    services:
+      firebird:
+        image: jacobalberty/firebird:v5.0
+        env:
+          FIREBIRD_USER: SYSDBA
+          FIREBIRD_PASSWORD: planomer
+          ISC_PASSWORD: planomer
+        ports:
+          - 3050:3050
+        options: >-
+          --health-cmd "/usr/local/firebird/bin/isql -z"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # ============================================
+      # Step 1: Checkout repository
+      # ============================================
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ============================================
+      # Step 2: Display system information
+      # ============================================
+      - name: Display system information
+        run: |
+          echo "========================================="
+          echo "System Information"
+          echo "========================================="
+          uname -a
+          echo ""
+          echo "CPU info:"
+          nproc
+          echo ""
+          echo "Memory info:"
+          free -h
+          echo ""
+          echo "Disk space:"
+          df -h
+          echo ""
+
+      # ============================================
+      # Step 3: Install system dependencies
+      # ============================================
+      - name: Install system dependencies
+        run: |
+          echo "========================================="
+          echo "Installing system dependencies"
+          echo "========================================="
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            cmake \
+            gcc-13 \
+            g++-13 \
+            libstdc++-13-dev \
+            python3-pip \
+            wget
+
+          echo ""
+          echo "✓ System dependencies installed"
+
+          # Verify compiler installation
+          echo ""
+          echo "Compiler versions:"
+          gcc-13 --version | head -n1
+          g++-13 --version | head -n1
+          cmake --version | head -n1
+
+      # ============================================
+      # Step 4: Install Firebird 5 client library
+      # ============================================
+      - name: Install Firebird 5.0 client
+        run: |
+          echo "========================================="
+          echo "Installing Firebird 5.0 client library"
+          echo "========================================="
+
+          # Download Firebird 5.0.0 for Linux x64
+          wget -q https://github.com/FirebirdSQL/firebird/releases/download/v5.0.0/Firebird-5.0.0.1306-0-linux-x64.tar.gz
+
+          echo "✓ Downloaded Firebird archive"
+
+          # Extract main archive
+          tar xzf Firebird-5.0.0.1306-0-linux-x64.tar.gz
+          cd Firebird-5.0.0.1306-0-linux-x64
+
+          # Extract buildroot which contains actual files
+          echo "→ Extracting buildroot..."
+          tar xzf buildroot.tar.gz
+
+          # Verify extraction
+          echo ""
+          echo "Checking extracted structure:"
+          ls -la opt/firebird/include/ 2>/dev/null || echo "✗ Headers not found"
+          ls -la opt/firebird/lib/ 2>/dev/null || echo "✗ Library not found"
+
+          # Copy headers to system directory
+          echo ""
+          echo "→ Installing Firebird headers..."
+          sudo cp -rv opt/firebird/include/* /usr/include/
+
+          # Copy all libraries to system directory (including dependencies for isql)
+          echo ""
+          echo "→ Installing Firebird libraries..."
+          sudo cp -v opt/firebird/lib/*.so* /usr/lib/x86_64-linux-gnu/
+
+          # Copy isql utility for database creation
+          echo ""
+          echo "→ Installing Firebird isql utility..."
+          sudo cp -v opt/firebird/bin/isql /usr/local/bin/
+          sudo chmod +x /usr/local/bin/isql
+
+          # Update library cache
+          sudo ldconfig
+
+          cd ..
+
+          # Verify installation
+          echo ""
+          echo "========================================="
+          echo "Firebird client verification"
+          echo "========================================="
+          echo "Headers:"
+          ls -la /usr/include/firebird/Interface.h
+          echo ""
+          echo "Library:"
+          ls -la /usr/lib/x86_64-linux-gnu/libfbclient.so*
+          echo ""
+          echo "Library cache:"
+          ldconfig -p | grep fbclient
+          echo ""
+          echo "isql utility:"
+          which isql
+          isql -z 2>&1 | head -n1 || echo "isql version check"
+          echo ""
+          echo "✓ Firebird 5.0 client installed successfully"
+
+      # ============================================
+      # Step 5: Install Conan package manager
+      # ============================================
+      - name: Install Conan
+        run: |
+          echo "========================================="
+          echo "Installing Conan package manager"
+          echo "========================================="
+          pip3 install conan
+          conan --version
+          echo ""
+          echo "✓ Conan installed"
+
+      # ============================================
+      # Step 6: Configure Conan profile
+      # ============================================
+      - name: Setup Conan profile
+        run: |
+          echo "========================================="
+          echo "Configuring Conan profile"
+          echo "========================================="
+
+          # Detect default profile
+          conan profile detect --force
+
+          # Display detected profile
+          echo ""
+          echo "Conan profile:"
+          conan profile show
+          echo ""
+          echo "✓ Conan profile configured"
+
+      # ============================================
+      # Step 7: Install Conan dependencies
+      # ============================================
+      - name: Install Conan dependencies
+        run: |
+          echo "========================================="
+          echo "Installing Conan dependencies"
+          echo "========================================="
+
+          conan install . \
+            --output-folder=build \
+            --build=missing \
+            -s build_type=${{ env.BUILD_TYPE }} \
+            -s compiler.cppstd=20
+
+          echo ""
+          echo "✓ Conan dependencies installed"
+
+          # Display generated files
+          echo ""
+          echo "Generated Conan files:"
+          ls -la build/
+
+      # ============================================
+      # Step 8: Configure CMake
+      # ============================================
+      - name: Configure CMake
+        run: |
+          echo "========================================="
+          echo "Configuring CMake"
+          echo "========================================="
+
+          # Check for CMake presets
+          if [ -f "CMakePresets.json" ]; then
+            echo "CMakePresets.json found:"
+            cat CMakePresets.json
+            echo ""
+            echo "Available presets:"
+            cmake --list-presets
+            echo ""
+          fi
+
+          # Find Conan toolchain file
+          TOOLCHAIN_FILE=""
+          if [ -f "build/conan_toolchain.cmake" ]; then
+            TOOLCHAIN_FILE="build/conan_toolchain.cmake"
+          elif [ -f "build/build/${{ env.BUILD_TYPE }}/generators/conan_toolchain.cmake" ]; then
+            TOOLCHAIN_FILE="build/build/${{ env.BUILD_TYPE }}/generators/conan_toolchain.cmake"
+          else
+            echo "✗ ERROR: conan_toolchain.cmake not found"
+            exit 1
+          fi
+
+          echo "Using toolchain: $TOOLCHAIN_FILE"
+          echo ""
+
+          # Configure with CMake
+          cmake -S . -B build \
+            -DCMAKE_TOOLCHAIN_FILE="${PWD}/${TOOLCHAIN_FILE}" \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DCMAKE_C_COMPILER=${{ env.CC }} \
+            -DCMAKE_CXX_COMPILER=${{ env.CXX }} \
+            -DBUILD_TESTING=ON \
+            -DBUILD_EXAMPLES=OFF \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_VERBOSE_MAKEFILE=${{ github.event.inputs.debug_mode == 'true' && 'ON' || 'OFF' }}
+
+          echo ""
+          echo "✓ CMake configured successfully"
+
+      # ============================================
+      # Step 9: Prepare test database
+      # ============================================
+      - name: Prepare test database
+        env:
+          FIREBIRD_HOST: localhost
+          FIREBIRD_PASSWORD: planomer
+        run: |
+          echo "========================================="
+          echo "Creating test database for query_generator"
+          echo "========================================="
+
+          # Wait for Firebird to be ready
+          timeout 30 bash -c 'until echo > /dev/tcp/localhost/3050; do sleep 1; done' \
+            && echo "✓ Firebird service is accessible" \
+            || (echo "✗ ERROR: Cannot connect to Firebird" && exit 1)
+
+          # Create test database using isql from Firebird Docker service
+          # We need to execute isql inside the service container
+          # But since we can't easily access the service container, we'll use the fbclient library we installed
+
+          # Create database SQL script with full TABLE_TEST_1 schema
+          cat > /tmp/create_testdb.sql << 'EOF'
+          CREATE DATABASE 'localhost:/tmp/testdb.fdb'
+          USER 'SYSDBA' PASSWORD 'planomer'
+          PAGE_SIZE 8192 DEFAULT CHARACTER SET UTF8;
+
+          CREATE TABLE TABLE_TEST_1 (
+              ID                  INTEGER GENERATED BY DEFAULT AS IDENTITY,
+              F_BIGINT            BIGINT,
+              F_BOOLEAN           BOOLEAN,
+              F_CHAR              CHAR(10),
+              F_DATE              DATE,
+              F_DECFLOAT          DECFLOAT(34),
+              F_DECIMAL           DECIMAL(34,8),
+              F_DOUBLE_PRECISION  DOUBLE PRECISION,
+              F_FLOAT             FLOAT,
+              F_INT128            INT128,
+              F_INTEGER           INTEGER,
+              F_NUMERIC           NUMERIC(16,6),
+              F_SMALINT           SMALLINT,
+              F_TIME              TIME,
+              F_TIME_TZ           TIME WITH TIME ZONE,
+              F_TIMESHTAMP        TIMESTAMP,
+              F_TIMESHTAMP_TZ     TIMESTAMP WITH TIME ZONE,
+              F_VARCHAR           VARCHAR(64),
+              F_BLOB_B            BLOB SUB_TYPE BINARY SEGMENT SIZE 1024,
+              F_BLOB_T            BLOB SUB_TYPE TEXT SEGMENT SIZE 1024,
+              F_NULL              INTEGER
+          );
+
+          ALTER TABLE TABLE_TEST_1 ADD CONSTRAINT UNQ1_TABLE_TEST_F_INTEGER UNIQUE (F_INTEGER);
+          ALTER TABLE TABLE_TEST_1 ADD CONSTRAINT PK_TABLE_TEST_1 PRIMARY KEY (ID);
+
+          COMMIT;
+          EXIT;
+          EOF
+
+          echo "→ Creating database /tmp/testdb.fdb..."
+
+          # Try to create database using isql if available
+          # If not, we'll need another approach
+          if command -v isql &> /dev/null; then
+            isql -i /tmp/create_testdb.sql
+          else
+            echo "✗ isql not found, trying alternative method..."
+            # Alternative: use Firebird client library directly
+            # For now, let's skip if isql is not available
+            # The build might still work if query_generator can create the DB
+            echo "⚠ Warning: Could not create database, query_generator will need to handle this"
+          fi
+
+          echo ""
+          echo "✓ Test database prepared"
+
+      # ============================================
+      # Step 10: Build project
+      # ============================================
+      - name: Build
+        run: |
+          echo "========================================="
+          echo "Building project"
+          echo "========================================="
+
+          cmake --build build -j$(nproc)
+
+          echo ""
+          echo "✓ Build completed successfully"
+
+          # Display built test executables
+          echo ""
+          echo "Built test executables:"
+          find build -type f -executable -name "test_*" | head -n 20
+
+      # ============================================
+      # Step 10: Verify Firebird service connectivity
+      # ============================================
+      - name: Verify Firebird connectivity
+        run: |
+          echo "========================================="
+          echo "Verifying Firebird service connectivity"
+          echo "========================================="
+
+          # Wait for Firebird to be ready
+          timeout 30 bash -c 'until echo > /dev/tcp/localhost/3050; do sleep 1; done' \
+            && echo "✓ Firebird service is accessible on port 3050" \
+            || (echo "✗ ERROR: Cannot connect to Firebird on port 3050" && exit 1)
+
+          echo ""
+          echo "Firebird connection parameters:"
+          echo "  Host: localhost"
+          echo "  Port: 3050"
+          echo "  User: SYSDBA"
+          echo "  Password: planomer"
+
+      # ============================================
+      # Step 11: Run tests
+      # ============================================
+      - name: Run tests
+        env:
+          FIREBIRD_HOST: localhost
+          FIREBIRD_PORT: 3050
+          FIREBIRD_USER: SYSDBA
+          FIREBIRD_PASSWORD: planomer
+          FIREBIRD_DB_PATH: /tmp/fbpp_temp_test.fdb
+          FIREBIRD_PERSISTENT_DB_PATH: /tmp/fbpp_persistent_test.fdb
+          FIREBIRD_CHARSET: UTF8
+        run: |
+          echo "========================================="
+          echo "Running tests"
+          echo "========================================="
+
+          echo "Environment variables:"
+          echo "  FIREBIRD_HOST=$FIREBIRD_HOST"
+          echo "  FIREBIRD_PORT=$FIREBIRD_PORT"
+          echo "  FIREBIRD_USER=$FIREBIRD_USER"
+          echo "  FIREBIRD_DB_PATH=$FIREBIRD_DB_PATH"
+          echo "  FIREBIRD_PERSISTENT_DB_PATH=$FIREBIRD_PERSISTENT_DB_PATH"
+          echo ""
+
+          # Create temp directory (should exist, but ensure)
+          mkdir -p /tmp
+
+          # Run CTest
+          cd build
+          ctest --output-on-failure --verbose
+
+          echo ""
+          echo "========================================="
+          echo "✓ All tests passed"
+          echo "========================================="
+
+      # ============================================
+      # Step 12: Upload build artifacts on failure
+      # ============================================
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
+            build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+
+      # ============================================
+      # Step 13: Display summary
+      # ============================================
+      - name: Summary
+        if: always()
+        run: |
+          echo "========================================="
+          echo "CI/CD Pipeline Summary"
+          echo "========================================="
+          echo "Build type: ${{ env.BUILD_TYPE }}"
+          echo "Compiler: ${{ env.CC }} / ${{ env.CXX }}"
+          echo "Status: ${{ job.status }}"
+          echo "========================================="
