@@ -87,9 +87,7 @@ jobs:
             g++-13 \
             libstdc++-13-dev \
             python3-pip \
-            wget \
-            libncurses5 \
-            libtommath1
+            wget
 
           echo ""
           echo "✓ System dependencies installed"
