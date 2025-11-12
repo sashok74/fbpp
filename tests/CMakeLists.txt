@@ -9,7 +9,7 @@ add_custom_command(
     OUTPUT ${TABLE_TEST_MAIN_HEADER} ${TABLE_TEST_SUPPORT_HEADER}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${TABLE_TEST_GENERATED_DIR}
     COMMAND $<TARGET_FILE:query_generator>
-        --dsn firebird5:testdb
+        --dsn localhost:/tmp/testdb.fdb
         --user SYSDBA
         --password planomer
         --charset UTF8
