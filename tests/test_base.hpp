@@ -164,6 +164,19 @@ protected:
                 "    F_BLOB_T            BLOB SUB_TYPE TEXT,"
                 "    F_NULL              INTEGER"
                 ")");
+
+            // Insert test data into TABLE_TEST_1
+            conn->ExecuteDDL(
+                "INSERT INTO TABLE_TEST_1 ("
+                "    F_BIGINT, F_BOOLEAN, F_CHAR, F_DATE, F_DECFLOAT, F_DECIMAL, "
+                "    F_DOUBLE_PRECISION, F_FLOAT, F_INT128, F_INTEGER, F_NUMERIC, "
+                "    F_SMALINT, F_TIME, F_TIMESHTAMP, F_VARCHAR"
+                ") VALUES ("
+                "    9223372036854775807, TRUE, 'TEST', '2024-01-15', 123.456, 9876543.21, "
+                "    3.14159265, 2.71828, 123456789012345678901234567890, 42, 123456.789, "
+                "    32767, '12:34:56', '2024-01-15 12:34:56', 'Test String'"
+                ")"
+            );
         }
     }
     
