@@ -227,10 +227,25 @@ jobs:
       # Step 8: Configure CMake
       # ============================================
       - name: Configure CMake
+        env:
+          FIREBIRD_HOST: localhost
+          FIREBIRD_PORT: 3050
+          FIREBIRD_USER: SYSDBA
+          FIREBIRD_PASSWORD: planomer
+          FIREBIRD_PERSISTENT_DB_PATH: /tmp/testdb.fdb
+          FIREBIRD_CHARSET: UTF8
         run: |
           echo "========================================="
           echo "Configuring CMake"
           echo "========================================="
+
+          echo "Environment variables for CMake configuration:"
+          echo "  FIREBIRD_HOST=$FIREBIRD_HOST"
+          echo "  FIREBIRD_PORT=$FIREBIRD_PORT"
+          echo "  FIREBIRD_USER=$FIREBIRD_USER"
+          echo "  FIREBIRD_PERSISTENT_DB_PATH=$FIREBIRD_PERSISTENT_DB_PATH"
+          echo "  FIREBIRD_CHARSET=$FIREBIRD_CHARSET"
+          echo ""
 
           # Check for CMake presets
           if [ -f "CMakePresets.json" ]; then
