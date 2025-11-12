@@ -349,10 +349,20 @@ jobs:
       # Step 10: Build project
       # ============================================
       - name: Build
+        env:
+          FIREBIRD_HOST: localhost
+          FIREBIRD_USER: SYSDBA
+          FIREBIRD_PASSWORD: planomer
+          FIREBIRD_PERSISTENT_DB_PATH: /tmp/testdb.fdb
         run: |
           echo "========================================="
           echo "Building project"
           echo "========================================="
+
+          echo "Environment variables for query_generator:"
+          echo "  FIREBIRD_HOST=$FIREBIRD_HOST"
+          echo "  FIREBIRD_PERSISTENT_DB_PATH=$FIREBIRD_PERSISTENT_DB_PATH"
+          echo ""
 
           cmake --build build -j$(nproc)
 

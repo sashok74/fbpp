@@ -5,13 +5,39 @@ set(TABLE_TEST_MAIN_HEADER ${TABLE_TEST_GENERATED_DIR}/queries.generated.hpp)
 set(TABLE_TEST_SUPPORT_HEADER ${TABLE_TEST_GENERATED_DIR}/queries.structs.generated.hpp)
 set(TABLE_TEST_QUERIES_JSON ${CMAKE_CURRENT_SOURCE_DIR}/data/table_test_1_queries.json)
 
+# Configure query_generator database connection using environment variables
+# This follows the same pattern as test runtime configuration
+set(QUERY_GEN_HOST "$ENV{FIREBIRD_HOST}")
+set(QUERY_GEN_DB_PATH "$ENV{FIREBIRD_PERSISTENT_DB_PATH}")
+set(QUERY_GEN_USER "$ENV{FIREBIRD_USER}")
+set(QUERY_GEN_PASSWORD "$ENV{FIREBIRD_PASSWORD}")
+
+# Fallback to defaults for local development if environment variables are not set
+if(NOT QUERY_GEN_HOST)
+    set(QUERY_GEN_HOST "firebird5")
+endif()
+if(NOT QUERY_GEN_DB_PATH)
+    set(QUERY_GEN_DB_PATH "testdb")
+endif()
+if(NOT QUERY_GEN_USER)
+    set(QUERY_GEN_USER "SYSDBA")
+endif()
+if(NOT QUERY_GEN_PASSWORD)
+    set(QUERY_GEN_PASSWORD "planomer")
+endif()
+
+# Build the DSN string
+set(QUERY_GEN_DSN "${QUERY_GEN_HOST}:${QUERY_GEN_DB_PATH}")
+
+message(STATUS "Query generator will use DSN: ${QUERY_GEN_DSN}")
+
 add_custom_command(
     OUTPUT ${TABLE_TEST_MAIN_HEADER} ${TABLE_TEST_SUPPORT_HEADER}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${TABLE_TEST_GENERATED_DIR}
     COMMAND $<TARGET_FILE:query_generator>
-        --dsn localhost:/tmp/testdb.fdb
-        --user SYSDBA
-        --password planomer
+        --dsn ${QUERY_GEN_DSN}
+        --user ${QUERY_GEN_USER}
+        --password ${QUERY_GEN_PASSWORD}
         --charset UTF8
         --input ${TABLE_TEST_QUERIES_JSON}
         --output ${TABLE_TEST_MAIN_HEADER}

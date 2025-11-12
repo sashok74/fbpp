@@ -18,6 +18,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
+### Environment Configuration
+
+**Local Development Setup** (IMPORTANT - run first):
+```bash
+# Set up environment variables for local Firebird server
+source scripts/setup_local_env.sh
+
+# Now you can build and test
+./build.sh RelWithDebInfo
+```
+
+**Environment Variables**:
+The project uses environment variables for database configuration, affecting both:
+- **Build time**: `query_generator` tool for code generation
+- **Test runtime**: Database connections in tests
+
+| Variable | Default (Local) | CI/CD Value | Description |
+|----------|----------------|-------------|-------------|
+| `FIREBIRD_HOST` | `192.168.7.248` | `localhost` | Firebird server hostname |
+| `FIREBIRD_PORT` | `3050` | `3050` | Firebird server port |
+| `FIREBIRD_USER` | `SYSDBA` | `SYSDBA` | Database user |
+| `FIREBIRD_PASSWORD` | `planomer` | `planomer` | Database password |
+| `FIREBIRD_PERSISTENT_DB_PATH` | `/mnt/test/binding_test.fdb` | `/tmp/testdb.fdb` | Persistent DB for query_generator |
+| `FIREBIRD_DB_PATH` | `/mnt/test/fbpp_temp_test.fdb` | `/tmp/fbpp_temp_test.fdb` | Temporary test database |
+
+**Alternative servers**:
+```bash
+# For firebird5 server (alternative local setup)
+export FIREBIRD_HOST=firebird5
+export FIREBIRD_PERSISTENT_DB_PATH=testdb
+./build.sh
+```
+
 ### Building and Testing
 
 **Primary build script** (recommended):
@@ -33,9 +66,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Note**: `build.sh` performs:
 1. Clean build directory
 2. Install Conan dependencies
-3. Configure CMake with Conan toolchain
-4. Build entire project
-5. **Run all tests automatically**
+3. Configure CMake with Conan toolchain (reads environment variables)
+4. Build entire project (query_generator uses env vars)
+5. **Run all tests automatically** (tests use env vars)
 
 ### Manual Building
 ```bash
@@ -64,6 +97,18 @@ SPDLOG_LEVEL=debug ./build/tests/unit/test_cancel_operation
 # Debug a test with GDB
 gdb ./build/tests/unit/test_statement
 ```
+
+### Database Requirements
+
+**For `query_generator` (build time)**:
+The persistent database specified in `FIREBIRD_PERSISTENT_DB_PATH` must exist and contain:
+- Table `TABLE_TEST_1` with columns: `ID`, `F_INTEGER`, `F_VARCHAR`, `F_BOOLEAN`
+
+This database is used by the `query_generator` tool during CMake build to generate type-safe query wrappers.
+
+**For tests (runtime)**:
+- Tests automatically create and manage their own databases
+- No manual setup required - tests use `FIREBIRD_DB_PATH` and `FIREBIRD_PERSISTENT_DB_PATH`
 
 ### Examples
 ```bash
