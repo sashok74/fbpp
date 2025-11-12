@@ -132,10 +132,10 @@ jobs:
           echo "→ Installing Firebird headers..."
           sudo cp -rv opt/firebird/include/* /usr/include/
 
-          # Copy library to system directory
+          # Copy all libraries to system directory (including dependencies for isql)
           echo ""
-          echo "→ Installing Firebird library..."
-          sudo cp -v opt/firebird/lib/libfbclient.so* /usr/lib/x86_64-linux-gnu/
+          echo "→ Installing Firebird libraries..."
+          sudo cp -v opt/firebird/lib/*.so* /usr/lib/x86_64-linux-gnu/
 
           # Copy isql utility for database creation
           echo ""
