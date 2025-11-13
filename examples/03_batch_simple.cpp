@@ -20,6 +20,7 @@
 #include <tuple>
 #include <optional>
 #include <fbpp/fbpp_all.hpp>
+#include <fbpp_util/connection_helper.hpp>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -47,53 +48,13 @@ int main() {
 
         std::cout << "Загрузка конфигурации...\n";
 
-        // Поиск конфигурационного файла
-        std::vector<std::string> paths = {
-            "../../config/test_config.json",
-            "../config/test_config.json",
-            "config/test_config.json",
-            "./test_config.json"
-        };
+        auto params = fbpp::util::getConnectionParams("tests.persistent_db");
 
-        std::ifstream config_file;
-        std::string config_path;
-        for (const auto& path : paths) {
-            config_file.open(path);
-            if (config_file.is_open()) {
-                config_path = path;
-                break;
-            }
-        }
-
-        if (!config_file.is_open()) {
-            throw std::runtime_error("Не найден файл конфигурации test_config.json");
-        }
-
-        auto config = json::parse(config_file);
-        auto db_config = config["tests"]["persistent_db"];
-
-        std::string server = "firebird5";
-        if (db_config.contains("server") && !db_config["server"].empty()) {
-            server = db_config["server"];
-        }
-        std::string path = db_config["path"];
-        std::string database = server + ":" + path;
-        std::string username = db_config["user"];
-        std::string password = db_config["password"];
-        std::string charset = db_config["charset"];
-
-        printInfo("Config file", config_path);
-        printInfo("Database", database);
-        printInfo("Username", username);
-        printInfo("Charset", charset);
+        printInfo("Database", params.database);
+        printInfo("Username", params.user);
+        printInfo("Charset", params.charset);
 
         std::cout << "\nПодключение к базе данных...\n";
-
-        ConnectionParams params;
-        params.database = database;
-        params.user = username;
-        params.password = password;
-        params.charset = charset;
 
         auto connection = std::make_unique<Connection>(params);
         std::cout << "✓ Успешно подключились к базе данных!\n";

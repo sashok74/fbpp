@@ -10,9 +10,13 @@
 # 2. Test runtime (database connections)
 #
 # The same variables work for both build and test phases, ensuring consistency.
+#
+# NOTE: This script is OPTIONAL for local development.
+# Without it, config/test_config.json defaults will be used.
+# Use this script to override config values (e.g., for testing CI/CD locally).
 
 # Firebird server configuration
-export FIREBIRD_HOST=192.168.7.248
+export FIREBIRD_HOST=firebird5.home.lan
 export FIREBIRD_PORT=3050
 export FIREBIRD_USER=SYSDBA
 export FIREBIRD_PASSWORD=planomer
@@ -23,8 +27,9 @@ export FIREBIRD_CHARSET=UTF8
 export FIREBIRD_DB_PATH=/mnt/test/fbpp_temp_test.fdb
 
 # Persistent database: used by query_generator and persistent tests
-# This database should have TABLE_TEST_1 with columns: ID, F_INTEGER, F_VARCHAR, F_BOOLEAN
-export FIREBIRD_PERSISTENT_DB_PATH=/mnt/test/binding_test.fdb
+# This database contains TABLE_TEST_1 with full schema of all Firebird types
+# For local development: short name "testdb" (resolves to /mnt/test/testdb on server)
+export FIREBIRD_PERSISTENT_DB_PATH=testdb
 
 echo "========================================="
 echo "fbpp Local Development Environment"

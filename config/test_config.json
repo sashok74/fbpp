@@ -1,7 +1,7 @@
 {
   "db": {
-    "server": "192.168.7.248",
-    "path": "/mnt/test/binding_test.fdb",
+    "server": "firebird5.home.lan",
+    "path": "testdb",
     "user": "SYSDBA",
     "password": "planomer",
     "charset": "UTF8",
@@ -18,16 +18,16 @@
   },
   "tests": {
     "persistent_db": {
+      "server": "firebird5.home.lan",
       "path": "testdb",
-      "server": "192.168.7.248",
       "user": "SYSDBA",
       "password": "planomer",
       "charset": "UTF8",
       "create_once": true
     },
     "temp_db": {
+      "server": "firebird5.home.lan",
       "path": "/mnt/test/fbpp_temp_test.fdb",
-      "server": "192.168.7.248",
       "user": "SYSDBA",
       "password": "planomer",
       "charset": "UTF8",

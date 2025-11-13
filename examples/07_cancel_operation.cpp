@@ -22,6 +22,7 @@
 #include "fbpp/core/statement.hpp"
 #include "fbpp/core/result_set.hpp"
 #include "fbpp/core/exception.hpp"
+#include <fbpp_util/connection_helper.hpp>
 #include <nlohmann/json.hpp>
 #include <firebird/Interface.h>
 
@@ -40,36 +41,10 @@ void thread_print(const std::string& msg) {
 }
 
 ConnectionParams loadConfig() {
-    std::vector<std::string> paths = {
-        "../../config/test_config.json",
-        "../config/test_config.json",
-        "config/test_config.json",
-        "./test_config.json"
-    };
-
-    std::ifstream config_file;
-    for (const auto& path : paths) {
-        config_file.open(path);
-        if (config_file.is_open()) {
-            thread_print("Config loaded from: " + path + "\n");
-            break;
-        }
-    }
-
-    if (!config_file.is_open()) {
-        throw std::runtime_error("test_config.json not found");
-    }
-
-    auto config = nlohmann::json::parse(config_file);
-    auto db_config = config["tests"]["persistent_db"];
-
-    ConnectionParams params;
-    params.database = std::string(db_config.value("server", "firebird5")) + ":" +
-                     std::string(db_config["path"]);
-    params.user = db_config["user"];
-    params.password = db_config["password"];
-    params.charset = db_config["charset"];
-
+    auto params = fbpp::util::getConnectionParams("tests.persistent_db");
+    thread_print("Config loaded successfully\n");
+    thread_print("  Database: " + params.database + "\n");
+    thread_print("  User: " + params.user + "\n");
     return params;
 }
 
