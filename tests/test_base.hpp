@@ -36,12 +36,38 @@ protected:
         // Use connection helper to get params with ENV overrides
         db_params_ = fbpp::util::getConnectionParams("tests.persistent_db");
 
-        // Create database once if it doesn't exist
-        if (!Connection::databaseExists(db_params_.database, db_params_)) {
+        // Create database if it doesn't exist
+        bool db_existed = Connection::databaseExists(db_params_.database, db_params_);
+        if (!db_existed) {
             Connection::createDatabase(db_params_);
+        }
 
-            // Create initial schema
-            auto conn = std::make_unique<Connection>(db_params_);
+        // Connect to database
+        auto conn = std::make_unique<Connection>(db_params_);
+
+        // Check if TABLE_TEST_1 exists and has data
+        bool table_exists = false;
+        bool has_data = false;
+
+        try {
+            // Check if table exists by querying it
+            auto stmt = conn->prepare("SELECT COUNT(*) FROM TABLE_TEST_1");
+            auto tra = conn->startTransaction();
+            auto rs = stmt->executeQuery(tra);
+            if (rs->fetch()) {
+                int count;
+                rs->get(0, count);
+                has_data = (count > 0);
+                table_exists = true;
+            }
+            tra->commit();
+        } catch (...) {
+            // Table doesn't exist, will create it
+            table_exists = false;
+        }
+
+        // Create schema if needed
+        if (!table_exists) {
             conn->ExecuteDDL(
                 "CREATE TABLE test_data ("
                 "    id INTEGER NOT NULL PRIMARY KEY,"
@@ -82,8 +108,10 @@ protected:
                 "    F_BLOB_T            BLOB SUB_TYPE TEXT,"
                 "    F_NULL              INTEGER"
                 ")");
+        }
 
-            // Insert test data into TABLE_TEST_1
+        // Insert test data if table is empty
+        if (!has_data) {
             conn->ExecuteDDL(
                 "INSERT INTO TABLE_TEST_1 ("
                 "    F_BIGINT, F_BOOLEAN, F_CHAR, F_DATE, F_DECFLOAT, F_DECIMAL, "
