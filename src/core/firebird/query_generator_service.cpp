@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <format>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -69,7 +70,7 @@ std::string toCamelCase(const std::string& sqlName, bool lowerFirst = true) {
     return out;
 }
 
-TypeMapping mapFieldType(const FieldInfo& field, bool isOutput) {
+TypeMapping mapFieldType(const FieldInfo& field, bool isOutput, const AdapterConfig& config) {
     auto baseType = static_cast<unsigned>(field.type);
     bool nullable = field.nullable || (isOutput && field.type % 2 == 1);
 
@@ -87,7 +88,17 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput) {
             break;
         case SQL_INT64:
             if (field.scale < 0) {
-                result.cppType = "double";
+                // NUMERIC(18,x) with scale
+                if (config.useTTMathNumeric) {
+                    result.cppType = std::format("fbpp::adapters::TTNumeric<1, {}>", field.scale);
+                    result.needsTTMath = true;
+                    result.scaledInfo = TypeMapping::ScaledNumericInfo{
+                        .intWords = 1,
+                        .scale = field.scale
+                    };
+                } else {
+                    result.cppType = "double";
+                }
             } else {
                 result.cppType = "std::int64_t";
             }
@@ -107,34 +118,86 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput) {
             result.cppType = "bool";
             break;
         case SQL_INT128:
-            result.cppType = "fbpp::core::Int128";
-            result.needsExtendedTypes = true;
+            if (field.scale < 0) {
+                // NUMERIC(38,x) with scale
+                if (config.useTTMathNumeric) {
+                    result.cppType = std::format("fbpp::adapters::TTNumeric<2, {}>", field.scale);
+                    result.needsTTMath = true;
+                    result.scaledInfo = TypeMapping::ScaledNumericInfo{
+                        .intWords = 2,
+                        .scale = field.scale
+                    };
+                } else {
+                    result.cppType = "fbpp::core::Int128";
+                    result.needsExtendedTypes = true;
+                }
+            } else {
+                // Pure INT128 (no scale)
+                if (config.useTTMathInt128) {
+                    result.cppType = "fbpp::adapters::TTInt128";
+                    result.needsTTMath = true;
+                } else {
+                    result.cppType = "fbpp::core::Int128";
+                    result.needsExtendedTypes = true;
+                }
+            }
             break;
         case SQL_DEC16:
-            result.cppType = "fbpp::core::DecFloat16";
-            result.needsExtendedTypes = true;
+            if (config.useCppDecimalDecFloat) {
+                result.cppType = "fbpp::adapters::DecFloat16";
+                result.needsCppDecimal = true;
+            } else {
+                result.cppType = "fbpp::core::DecFloat16";
+                result.needsExtendedTypes = true;
+            }
             break;
         case SQL_DEC34:
-            result.cppType = "fbpp::core::DecFloat34";
-            result.needsExtendedTypes = true;
+            if (config.useCppDecimalDecFloat) {
+                result.cppType = "fbpp::adapters::DecFloat34";
+                result.needsCppDecimal = true;
+            } else {
+                result.cppType = "fbpp::core::DecFloat34";
+                result.needsExtendedTypes = true;
+            }
             break;
         case SQL_TYPE_DATE:
-            result.cppType = "fbpp::core::Date";
-            result.needsExtendedTypes = true;
+            if (config.useChronoDatetime) {
+                result.cppType = "std::chrono::year_month_day";
+                result.needsChrono = true;
+            } else {
+                result.cppType = "fbpp::core::Date";
+                result.needsExtendedTypes = true;
+            }
             break;
         case SQL_TIMESTAMP:
-            result.cppType = "fbpp::core::Timestamp";
-            result.needsExtendedTypes = true;
+            if (config.useChronoDatetime) {
+                result.cppType = "std::chrono::system_clock::time_point";
+                result.needsChrono = true;
+            } else {
+                result.cppType = "fbpp::core::Timestamp";
+                result.needsExtendedTypes = true;
+            }
             break;
         case SQL_TIMESTAMP_TZ:
-            result.cppType = "fbpp::core::TimestampTz";
-            result.needsExtendedTypes = true;
+            if (config.useChronoDatetime) {
+                result.cppType = "std::chrono::zoned_time<std::chrono::microseconds>";
+                result.needsChrono = true;
+            } else {
+                result.cppType = "fbpp::core::TimestampTz";
+                result.needsExtendedTypes = true;
+            }
             break;
         case SQL_TYPE_TIME:
-            result.cppType = "fbpp::core::Time";
-            result.needsExtendedTypes = true;
+            if (config.useChronoDatetime) {
+                result.cppType = "std::chrono::hh_mm_ss<std::chrono::microseconds>";
+                result.needsChrono = true;
+            } else {
+                result.cppType = "fbpp::core::Time";
+                result.needsExtendedTypes = true;
+            }
             break;
         case SQL_TIME_TZ:
+            // No direct chrono equivalent - keep using core type
             result.cppType = "fbpp::core::TimeTz";
             result.needsExtendedTypes = true;
             break;
@@ -159,7 +222,7 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput) {
     return result;
 }
 
-std::vector<FieldSpec> buildFieldSpecs(const std::vector<FieldInfo>& fields, bool isOutput) {
+std::vector<FieldSpec> buildFieldSpecs(const std::vector<FieldInfo>& fields, bool isOutput, const AdapterConfig& config) {
     std::vector<FieldSpec> specs;
     specs.reserve(fields.size());
 
@@ -178,7 +241,7 @@ std::vector<FieldSpec> buildFieldSpecs(const std::vector<FieldInfo>& fields, boo
             baseName += std::to_string(it->second + 1);
         }
         spec.memberName = baseName;
-        spec.type = mapFieldType(fields[i], isOutput);
+        spec.type = mapFieldType(fields[i], isOutput, config);
 
         specs.push_back(std::move(spec));
     }
@@ -190,21 +253,42 @@ std::string makeStructName(const std::string& queryName, bool isInput) {
 }
 
 std::string renderMainHeader(const std::vector<QuerySpec>& queries,
-                             std::string_view supportHeaderName) {
+                             std::string_view supportHeaderName,
+                             const AdapterConfig& config) {
     bool needsOptional = false;
     bool needsString = false;
     bool needsExtended = false;
+    bool needsTTMath = false;
+    bool needsChrono = false;
+    bool needsCppDecimal = false;
+
+    // Collect unique scaled numerics for type aliases
+    std::set<std::pair<int, int16_t>> ttNumericAliases; // (intWords, scale)
 
     for (const auto& q : queries) {
         for (const auto& f : q.inputs) {
             needsOptional |= f.type.needsOptional;
             needsString |= f.type.needsString;
             needsExtended |= f.type.needsExtendedTypes;
+            needsTTMath |= f.type.needsTTMath;
+            needsChrono |= f.type.needsChrono;
+            needsCppDecimal |= f.type.needsCppDecimal;
+
+            if (f.type.scaledInfo.has_value()) {
+                ttNumericAliases.insert({f.type.scaledInfo->intWords, f.type.scaledInfo->scale});
+            }
         }
         for (const auto& f : q.outputs) {
             needsOptional |= f.type.needsOptional;
             needsString |= f.type.needsString;
             needsExtended |= f.type.needsExtendedTypes;
+            needsTTMath |= f.type.needsTTMath;
+            needsChrono |= f.type.needsChrono;
+            needsCppDecimal |= f.type.needsCppDecimal;
+
+            if (f.type.scaledInfo.has_value()) {
+                ttNumericAliases.insert({f.type.scaledInfo->intWords, f.type.scaledInfo->scale});
+            }
         }
     }
 
@@ -217,10 +301,33 @@ std::string renderMainHeader(const std::vector<QuerySpec>& queries,
     if (needsOptional) {
         out << "#include <optional>\n";
     }
+    if (needsChrono) {
+        out << "#include <chrono>\n";
+    }
     if (needsExtended) {
         out << "#include \"fbpp/core/extended_types.hpp\"\n";
     }
+    if (needsTTMath) {
+        out << "#include \"fbpp/adapters/ttmath_int128.hpp\"\n";
+        out << "#include \"fbpp/adapters/ttmath_numeric.hpp\"\n";
+    }
+    if (needsCppDecimal) {
+        out << "#include \"fbpp/adapters/cppdecimal_decfloat.hpp\"\n";
+    }
     out << "#include \"fbpp/core/query_executor.hpp\"\n\n";
+
+    // Generate type aliases for TTNumeric types
+    if (config.generateAliases && !ttNumericAliases.empty()) {
+        out << "// Type aliases for scaled numeric types\n";
+        for (const auto& [intWords, scale] : ttNumericAliases) {
+            int precision = (intWords == 1) ? 18 : 38;
+            int decimalPlaces = -scale;
+            std::string aliasName = std::format("Numeric{}_{}", precision, decimalPlaces);
+            out << std::format("using {} = fbpp::adapters::TTNumeric<{}, {}>;\n",
+                              aliasName, intWords, scale);
+        }
+        out << "\n";
+    }
 
     out << "namespace generated::queries {\n\n";
 
@@ -339,7 +446,8 @@ std::string renderSupportHeader(const std::vector<QuerySpec>& queries) {
 QueryGeneratorService::QueryGeneratorService(Connection& connection)
     : connection_(connection) {}
 
-std::vector<QuerySpec> QueryGeneratorService::buildQuerySpecs(const std::vector<QueryDefinition>& definitions) const {
+std::vector<QuerySpec> QueryGeneratorService::buildQuerySpecs(const std::vector<QueryDefinition>& definitions,
+                                                              const AdapterConfig& config) const {
     std::vector<QuerySpec> querySpecs;
     querySpecs.reserve(definitions.size());
 
@@ -353,8 +461,8 @@ std::vector<QuerySpec> QueryGeneratorService::buildQuerySpecs(const std::vector<
         spec.hasNamedParameters = parseResult.hasNamedParams;
 
         auto meta = connection_.describeQuery(spec.originalSql);
-        spec.inputs = buildFieldSpecs(meta.inputFields, false);
-        spec.outputs = buildFieldSpecs(meta.outputFields, true);
+        spec.inputs = buildFieldSpecs(meta.inputFields, false, config);
+        spec.outputs = buildFieldSpecs(meta.outputFields, true, config);
 
         querySpecs.push_back(std::move(spec));
     }
@@ -366,11 +474,13 @@ std::vector<QuerySpec> QueryGeneratorService::buildQuerySpecs(const std::vector<
 }
 
 std::string renderQueryGeneratorMainHeader(const std::vector<QuerySpec>& specs,
-                                           std::string_view supportHeaderName) {
-    return renderMainHeader(specs, supportHeaderName);
+                                           std::string_view supportHeaderName,
+                                           const AdapterConfig& config) {
+    return renderMainHeader(specs, supportHeaderName, config);
 }
 
-std::string renderQueryGeneratorSupportHeader(const std::vector<QuerySpec>& specs) {
+std::string renderQueryGeneratorSupportHeader(const std::vector<QuerySpec>& specs,
+                                              const AdapterConfig& config) {
     return renderSupportHeader(specs);
 }
 
