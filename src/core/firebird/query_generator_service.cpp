@@ -71,17 +71,28 @@ std::string toCamelCase(const std::string& sqlName, bool lowerFirst = true) {
 }
 
 TypeMapping mapFieldType(const FieldInfo& field, bool isOutput, const AdapterConfig& config) {
-    auto baseType = static_cast<unsigned>(field.type);
-    bool nullable = field.nullable || (isOutput && field.type % 2 == 1);
+    const auto baseType = static_cast<unsigned>(field.type);
+    const bool fieldIsNullable = (baseType & 1U) != 0U;
+    const auto sqlType = baseType & ~1U;
+    bool nullable = field.nullable || (isOutput && fieldIsNullable);
 
     TypeMapping result;
-    switch (baseType & ~1U) {
+    switch (sqlType) {
         case SQL_SHORT:
             result.cppType = "std::int16_t";
             break;
         case SQL_LONG:
             if (field.scale < 0) {
-                result.cppType = "double";
+                if (config.useTTMathNumeric) {
+                    result.cppType = std::format("fbpp::adapters::TTNumeric<1, {}>", field.scale);
+                    result.needsTTMath = true;
+                    result.scaledInfo = TypeMapping::ScaledNumericInfo{
+                        .intWords = 1,
+                        .scale = field.scale
+                    };
+                } else {
+                    result.cppType = "std::int32_t";
+                }
             } else {
                 result.cppType = "std::int32_t";
             }
@@ -97,7 +108,7 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput, const AdapterCon
                         .scale = field.scale
                     };
                 } else {
-                    result.cppType = "double";
+                    result.cppType = "std::int64_t";
                 }
             } else {
                 result.cppType = "std::int64_t";
@@ -303,6 +314,7 @@ std::string renderMainHeader(const std::vector<QuerySpec>& queries,
     }
     if (needsChrono) {
         out << "#include <chrono>\n";
+        out << "#include \"fbpp/adapters/chrono_datetime.hpp\"\n";
     }
     if (needsExtended) {
         out << "#include \"fbpp/core/extended_types.hpp\"\n";

@@ -1,5 +1,7 @@
 include(GoogleTest)
 
+add_compile_definitions(FBPP_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test_data")
+
 set(TABLE_TEST_GENERATED_DIR ${CMAKE_BINARY_DIR}/generated/table_test_1)
 set(TABLE_TEST_MAIN_HEADER ${TABLE_TEST_GENERATED_DIR}/queries.generated.hpp)
 set(TABLE_TEST_SUPPORT_HEADER ${TABLE_TEST_GENERATED_DIR}/queries.structs.generated.hpp)

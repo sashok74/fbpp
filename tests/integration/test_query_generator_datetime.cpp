@@ -65,7 +65,7 @@ protected:
                 ")"
             );
         } catch (...) {
-            // Table already exists, ignore
+            // Table already exists; ignore.
         }
     }
 };

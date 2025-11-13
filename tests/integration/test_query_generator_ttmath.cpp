@@ -29,7 +29,6 @@ protected:
     }
 
     void createTestSchema() override {
-        // Создаем таблицу TTMATH_TEST с нужными полями
         try {
             connection_->ExecuteDDL(
                 "CREATE TABLE TTMATH_TEST ("
@@ -46,7 +45,7 @@ protected:
                 ")"
             );
         } catch (...) {
-            // Table already exists, ignore
+            // Table already exists; expected if previous test already created it.
         }
     }
 

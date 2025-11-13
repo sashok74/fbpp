@@ -10,6 +10,14 @@ if [ ! -d "build" ]; then
     conan install . --output-folder=build --build=missing
 fi
 
+# Ensure persistent test database has required schema
+if [[ "${SKIP_DB_PREP:-0}" != "1" ]]; then
+    echo "Preparing Firebird test database..."
+    ./scripts/prepare_test_db.sh
+else
+    echo "Skipping test database preparation (SKIP_DB_PREP=1)"
+fi
+
 # Configure with CMake
 echo "Configuring with CMake..."
 cmake -S . -B build \
