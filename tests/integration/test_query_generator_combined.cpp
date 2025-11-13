@@ -145,10 +145,10 @@ TEST_F(QueryGeneratorCombinedTest, InsertAndSelectAllAdapters) {
     EXPECT_EQ(std::get<1>(result).to_string(), "99999999999999999999999999999999999.99");
 
     // Verify CppDecimal DecFloat16
-    EXPECT_EQ(std::get<2>(result).to_string(), "123.456");
+    EXPECT_EQ(std::get<2>(result).toString(), "123.456");
 
     // Verify CppDecimal DecFloat34
-    EXPECT_EQ(std::get<3>(result).to_string(), "123456789012345678901234567890.1234");
+    EXPECT_EQ(std::get<3>(result).toString(), "123456789012345678901234567890.1234");
 
     // Verify std::chrono date
     auto date = std::get<4>(result);
@@ -239,8 +239,8 @@ TEST_F(QueryGeneratorCombinedTest, SelectAllCombined) {
     EXPECT_EQ(std::get<0>(result), 1);
     EXPECT_EQ(std::get<1>(result).ToString(), "111111111111111111111111111111");
     EXPECT_EQ(std::get<2>(result).to_string(), "1111.11");
-    EXPECT_EQ(std::get<3>(result).to_string(), "11.11");
-    EXPECT_EQ(std::get<4>(result).to_string(), "111111111.1111");
+    EXPECT_EQ(std::get<3>(result).toString(), "11.11");
+    EXPECT_EQ(std::get<4>(result).toString(), "111111111.1111");
 
     auto date1 = std::get<5>(result);
     EXPECT_EQ(static_cast<int>(date1.year()), 2024);
@@ -253,8 +253,8 @@ TEST_F(QueryGeneratorCombinedTest, SelectAllCombined) {
     EXPECT_EQ(std::get<0>(result), 2);
     EXPECT_EQ(std::get<1>(result).ToString(), "222222222222222222222222222222");
     EXPECT_EQ(std::get<2>(result).to_string(), "2222.22");
-    EXPECT_EQ(std::get<3>(result).to_string(), "22.22");
-    EXPECT_EQ(std::get<4>(result).to_string(), "222222222.2222");
+    EXPECT_EQ(std::get<3>(result).toString(), "22.22");
+    EXPECT_EQ(std::get<4>(result).toString(), "222222222.2222");
 
     auto date2 = std::get<5>(result);
     EXPECT_EQ(static_cast<int>(date2.year()), 2024);

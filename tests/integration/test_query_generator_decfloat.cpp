@@ -116,14 +116,14 @@ TEST_F(QueryGeneratorDecFloatTest, InsertAndSelectDecFloatTypes) {
     ASSERT_TRUE(resultSet->fetch(result));
 
     // Verify DECFLOAT16 values
-    EXPECT_EQ(std::get<0>(result).to_string(), "123.456");
+    EXPECT_EQ(std::get<0>(result).toString(), "123.456");
 
     // Verify nullable DECFLOAT16
     ASSERT_TRUE(std::get<1>(result).has_value());
     EXPECT_EQ(std::get<1>(result)->to_string(), "789.012");
 
     // Verify DECFLOAT34 values
-    EXPECT_EQ(std::get<2>(result).to_string(), "123456789012345678901234567890.1234");
+    EXPECT_EQ(std::get<2>(result).toString(), "123456789012345678901234567890.1234");
 
     // Verify nullable DECFLOAT34
     ASSERT_TRUE(std::get<3>(result).has_value());
@@ -197,10 +197,10 @@ TEST_F(QueryGeneratorDecFloatTest, UpdateDecFloat34) {
     ASSERT_TRUE(resultSet->fetch(result));
 
     // Verify DECFLOAT34 was updated
-    EXPECT_EQ(std::get<2>(result).to_string(), "999999999999999999999999999999.9999");
+    EXPECT_EQ(std::get<2>(result).toString(), "999999999999999999999999999999.9999");
 
     // Other fields should remain unchanged
-    EXPECT_EQ(std::get<0>(result).to_string(), "100.00");
+    EXPECT_EQ(std::get<0>(result).toString(), "100.00");
     EXPECT_FALSE(std::get<1>(result).has_value());  // Still NULL
     EXPECT_EQ(std::get<4>(result), "Update Test");
 }
@@ -269,12 +269,12 @@ TEST_F(QueryGeneratorDecFloatTest, SelectDecFloat34Greater) {
 
     // First result: Row 2 (DECFLOAT34 = 500)
     ASSERT_TRUE(resultSet->fetch(result));
-    EXPECT_EQ(std::get<0>(result).to_string(), "500");
+    EXPECT_EQ(std::get<0>(result).toString(), "500");
     EXPECT_EQ(std::get<1>(result), "Row 2");
 
     // Second result: Row 3 (DECFLOAT34 = 1000)
     ASSERT_TRUE(resultSet->fetch(result));
-    EXPECT_EQ(std::get<0>(result).to_string(), "1000");
+    EXPECT_EQ(std::get<0>(result).toString(), "1000");
     EXPECT_EQ(std::get<1>(result), "Row 3");
 
     // No more results
@@ -340,10 +340,10 @@ TEST_F(QueryGeneratorDecFloatTest, SelectAllDecFloat) {
     // First row
     ASSERT_TRUE(resultSet->fetch(result));
     EXPECT_EQ(std::get<0>(result), 1);
-    EXPECT_EQ(std::get<1>(result).to_string(), "111.111");
+    EXPECT_EQ(std::get<1>(result).toString(), "111.111");
     ASSERT_TRUE(std::get<2>(result).has_value());
     EXPECT_EQ(std::get<2>(result)->to_string(), "222.222");
-    EXPECT_EQ(std::get<3>(result).to_string(), "333333333333333333.333333");
+    EXPECT_EQ(std::get<3>(result).toString(), "333333333333333333.333333");
     ASSERT_TRUE(std::get<4>(result).has_value());
     EXPECT_EQ(std::get<4>(result)->to_string(), "444444444444444444.444444");
     EXPECT_EQ(std::get<5>(result), "First");
@@ -351,9 +351,9 @@ TEST_F(QueryGeneratorDecFloatTest, SelectAllDecFloat) {
     // Second row
     ASSERT_TRUE(resultSet->fetch(result));
     EXPECT_EQ(std::get<0>(result), 2);
-    EXPECT_EQ(std::get<1>(result).to_string(), "555.555");
+    EXPECT_EQ(std::get<1>(result).toString(), "555.555");
     EXPECT_FALSE(std::get<2>(result).has_value());  // NULL
-    EXPECT_EQ(std::get<3>(result).to_string(), "666666666666666666.666666");
+    EXPECT_EQ(std::get<3>(result).toString(), "666666666666666666.666666");
     EXPECT_FALSE(std::get<4>(result).has_value());  // NULL
     EXPECT_EQ(std::get<5>(result), "Second");
 
