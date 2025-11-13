@@ -135,6 +135,22 @@ protected:
         } catch (...) {
             // Table already exists, ignore
         }
+
+        // Create DECFLOAT_TEST for query_generator integration tests with CppDecimal adapters
+        // This table is required during build time for query_generator to analyze field types
+        try {
+            conn->ExecuteDDL(
+                "CREATE TABLE DECFLOAT_TEST ("
+                "    F_ID INTEGER NOT NULL PRIMARY KEY,"
+                "    F_DECFLOAT16 DECFLOAT(16),"
+                "    F_DECFLOAT16_NULLABLE DECFLOAT(16),"
+                "    F_DECFLOAT34 DECFLOAT(34),"
+                "    F_DECFLOAT34_NULLABLE DECFLOAT(34),"
+                "    F_NAME VARCHAR(100)"
+                ")");
+        } catch (...) {
+            // Table already exists, ignore
+        }
     }
 
     static void TearDownTestSuite() {

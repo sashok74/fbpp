@@ -438,3 +438,73 @@ target_link_libraries(test_generated_ttmath_compile PRIVATE
     fbpp
     ${FIREBIRD_LIBRARIES}
 )
+
+# ============================================================================
+# CppDecimal adapter integration tests (DECFLOAT types)
+# ============================================================================
+
+# Generated header paths for CppDecimal test
+set(GENERATED_DECFLOAT_HEADER "${CMAKE_BINARY_DIR}/generated_queries_decfloat.hpp")
+set(GENERATED_DECFLOAT_SUPPORT "${CMAKE_BINARY_DIR}/generated_queries_decfloat_support.hpp")
+set(DECFLOAT_QUERIES_JSON "${CMAKE_SOURCE_DIR}/tests/test_data/query_generator_decfloat_queries.json")
+
+# Custom command to generate header using query_generator with --use-cppdecimal
+add_custom_command(
+    OUTPUT ${GENERATED_DECFLOAT_HEADER} ${GENERATED_DECFLOAT_SUPPORT}
+    COMMAND $<TARGET_FILE:query_generator>
+        --use-cppdecimal
+        --dsn ${FIREBIRD_DSN}
+        --user ${FIREBIRD_USER}
+        --password ${FIREBIRD_PASSWORD}
+        --input ${DECFLOAT_QUERIES_JSON}
+        --output ${GENERATED_DECFLOAT_HEADER}
+        --support ${GENERATED_DECFLOAT_SUPPORT}
+    DEPENDS query_generator ${DECFLOAT_QUERIES_JSON}
+    COMMENT "Generating CppDecimal query header from ${DECFLOAT_QUERIES_JSON}"
+    VERBATIM
+)
+
+# Custom target to ensure headers are generated
+add_custom_target(generate_decfloat_queries
+    DEPENDS ${GENERATED_DECFLOAT_HEADER} ${GENERATED_DECFLOAT_SUPPORT}
+)
+
+# Test: query_generator with CppDecimal adapters (full E2E integration test)
+# This test verifies that:
+#   1. query_generator can generate code with CppDecimal adapters
+#   2. Generated code compiles correctly
+#   3. Generated code works with actual database operations
+add_executable(test_query_generator_decfloat
+    integration/test_query_generator_decfloat.cpp
+    test_base.cpp
+)
+
+# Make test depend on generated header
+add_dependencies(test_query_generator_decfloat generate_decfloat_queries)
+
+# Include directory for generated header
+target_include_directories(test_query_generator_decfloat PRIVATE ${CMAKE_BINARY_DIR})
+
+target_link_libraries(test_query_generator_decfloat PRIVATE
+    fbpp
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_query_generator_decfloat)
+
+# Test: Standalone compilation test for generated CppDecimal code
+# This is a quick smoke test that verifies the generated code compiles
+add_executable(test_generated_decfloat_compile
+    integration/test_generated_decfloat_compile.cpp
+)
+
+add_dependencies(test_generated_decfloat_compile generate_decfloat_queries)
+target_include_directories(test_generated_decfloat_compile PRIVATE ${CMAKE_BINARY_DIR})
+
+target_link_libraries(test_generated_decfloat_compile PRIVATE
+    fbpp
+    ${FIREBIRD_LIBRARIES}
+)
