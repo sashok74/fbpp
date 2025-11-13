@@ -113,23 +113,23 @@ TEST_F(QueryGeneratorTTMathTest, InsertAndSelectTTMathTypes) {
 
     // Verify INT128 values
     ASSERT_TRUE(output.fInt128Pure.has_value());
-    EXPECT_EQ(output.fInt128Pure->toString(), "123456789012345678901234567890");
+    EXPECT_EQ(output.fInt128Pure->ToString(), "123456789012345678901234567890");
     ASSERT_TRUE(output.fInt128Nullable.has_value());
-    EXPECT_EQ(output.fInt128Nullable->toString(), "987654321098765432109876543210");
+    EXPECT_EQ(output.fInt128Nullable->ToString(), "987654321098765432109876543210");
 
     // Verify NUMERIC38 values
     ASSERT_TRUE(output.fNumeric382.has_value());
-    EXPECT_EQ(output.fNumeric382->toString(), "12345678901234567890.12");
+    EXPECT_EQ(output.fNumeric382->ToString(), "12345678901234567890.12");
     ASSERT_TRUE(output.fNumeric384.has_value());
-    EXPECT_EQ(output.fNumeric384->toString(), "1234567890123456.1234");
+    EXPECT_EQ(output.fNumeric384->ToString(), "1234567890123456.1234");
     ASSERT_TRUE(output.fNumeric388.has_value());
-    EXPECT_EQ(output.fNumeric388->toString(), "123456789012.12345678");
+    EXPECT_EQ(output.fNumeric388->ToString(), "123456789012.12345678");
 
     // Verify NUMERIC18 values
     ASSERT_TRUE(output.fNumeric182.has_value());
-    EXPECT_EQ(output.fNumeric182->toString(), "1234567890123456.12");
+    EXPECT_EQ(output.fNumeric182->ToString(), "1234567890123456.12");
     ASSERT_TRUE(output.fNumeric186.has_value());
-    EXPECT_EQ(output.fNumeric186->toString(), "123456789012.123456");
+    EXPECT_EQ(output.fNumeric186->ToString(), "123456789012.123456");
 
     // Verify name
     ASSERT_TRUE(output.fName.has_value());
@@ -168,8 +168,8 @@ TEST_F(QueryGeneratorTTMathTest, UpdateNumericTypes) {
 
     auto [numeric38_2, numeric38_8] = result;
 
-    EXPECT_EQ(numeric38_2.toString(), "99999999999999999999.99");
-    EXPECT_EQ(numeric38_8.toString(), "999999999999.99999999");
+    EXPECT_EQ(numeric38_2.ToString(), "99999999999999999999.99");
+    EXPECT_EQ(numeric38_8.ToString(), "999999999999.99999999");
 
     selectTxn->Commit();
 }
@@ -193,11 +193,11 @@ TEST_F(QueryGeneratorTTMathTest, SelectScaledTypesWithFilter) {
 
     // Verify scaled numeric types are present
     ASSERT_TRUE(output.fNumeric382.has_value());
-    EXPECT_FALSE(output.fNumeric382->toString().empty());
+    EXPECT_FALSE(output.fNumeric382->ToString().empty());
     ASSERT_TRUE(output.fNumeric388.has_value());
-    EXPECT_FALSE(output.fNumeric388->toString().empty());
+    EXPECT_FALSE(output.fNumeric388->ToString().empty());
     ASSERT_TRUE(output.fNumeric182.has_value());
-    EXPECT_FALSE(output.fNumeric182->toString().empty());
+    EXPECT_FALSE(output.fNumeric182->ToString().empty());
 
     txn->Commit();
 }
@@ -224,18 +224,18 @@ TEST_F(QueryGeneratorTTMathTest, SelectAllTTMath) {
         EXPECT_GT(row.fId, 0);
 
         if (row.fInt128Pure.has_value()) {
-            EXPECT_FALSE(row.fInt128Pure->toString().empty());
+            EXPECT_FALSE(row.fInt128Pure->ToString().empty());
         }
 
         // All rows should have these required fields
         if (row.fNumeric382.has_value()) {
-            EXPECT_FALSE(row.fNumeric382->toString().empty());
+            EXPECT_FALSE(row.fNumeric382->ToString().empty());
         }
         if (row.fNumeric388.has_value()) {
-            EXPECT_FALSE(row.fNumeric388->toString().empty());
+            EXPECT_FALSE(row.fNumeric388->ToString().empty());
         }
         if (row.fNumeric182.has_value()) {
-            EXPECT_FALSE(row.fNumeric182->toString().empty());
+            EXPECT_FALSE(row.fNumeric182->ToString().empty());
         }
     }
 
