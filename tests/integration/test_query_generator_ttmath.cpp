@@ -143,6 +143,28 @@ TEST_F(QueryGeneratorTTMathTest, InsertAndSelectTTMathTypes) {
 }
 
 TEST_F(QueryGeneratorTTMathTest, UpdateNumericTypes) {
+    // First, insert a row to update
+    auto insertTxn = connection_->StartTransaction();
+    auto insertStmt = connection_->prepareStatement(
+        std::string(QueryDescriptor<QueryId::InsertTTMathTypes>::positionalSql)
+    );
+
+    InsertTTMathTypesIn insertInput;
+    insertInput.param1 = 1;  // F_ID
+    insertInput.param2 = fbpp::adapters::Int128("100");
+    insertInput.param3 = fbpp::adapters::Int128("200");
+    insertInput.param4 = fbpp::adapters::TTNumeric<2, -2>("100.00");
+    insertInput.param5 = fbpp::adapters::TTNumeric<2, -4>("200.0000");
+    insertInput.param6 = fbpp::adapters::TTNumeric<2, -8>("300.00000000");
+    insertInput.param7 = fbpp::adapters::TTNumeric<2, -18>("400.000000000000000000");
+    insertInput.param8 = fbpp::adapters::TTNumeric<1, -2>("500.00");
+    insertInput.param9 = fbpp::adapters::TTNumeric<1, -6>("600.000000");
+    insertInput.param10 = "Initial";
+
+    insertTxn->execute(insertStmt, insertInput);
+    insertTxn->Commit();
+
+    // Now update the row
     auto txn = connection_->StartTransaction();
 
     auto updateStmt = connection_->prepareStatement(
@@ -179,6 +201,28 @@ TEST_F(QueryGeneratorTTMathTest, UpdateNumericTypes) {
 }
 
 TEST_F(QueryGeneratorTTMathTest, SelectScaledTypesWithFilter) {
+    // First, insert a row
+    auto insertTxn = connection_->StartTransaction();
+    auto insertStmt = connection_->prepareStatement(
+        std::string(QueryDescriptor<QueryId::InsertTTMathTypes>::positionalSql)
+    );
+
+    InsertTTMathTypesIn insertInput;
+    insertInput.param1 = 1;  // F_ID
+    insertInput.param2 = fbpp::adapters::Int128("100");
+    insertInput.param3 = fbpp::adapters::Int128("200");
+    insertInput.param4 = fbpp::adapters::TTNumeric<2, -2>("12345.67");
+    insertInput.param5 = fbpp::adapters::TTNumeric<2, -4>("98765.4321");
+    insertInput.param6 = fbpp::adapters::TTNumeric<2, -8>("111.22334455");
+    insertInput.param7 = fbpp::adapters::TTNumeric<2, -18>("0.123456789012345678");
+    insertInput.param8 = fbpp::adapters::TTNumeric<1, -2>("5432.10");
+    insertInput.param9 = fbpp::adapters::TTNumeric<1, -6>("9876.543210");
+    insertInput.param10 = "Filter Test";
+
+    insertTxn->execute(insertStmt, insertInput);
+    insertTxn->Commit();
+
+    // Now select with filter
     auto txn = connection_->StartTransaction();
 
     auto stmt = connection_->prepareStatement(
@@ -207,6 +251,43 @@ TEST_F(QueryGeneratorTTMathTest, SelectScaledTypesWithFilter) {
 }
 
 TEST_F(QueryGeneratorTTMathTest, SelectAllTTMath) {
+    // First, insert a couple of rows
+    auto insertTxn = connection_->StartTransaction();
+    auto insertStmt = connection_->prepareStatement(
+        std::string(QueryDescriptor<QueryId::InsertTTMathTypes>::positionalSql)
+    );
+
+    // Insert row 1
+    InsertTTMathTypesIn input1;
+    input1.param1 = 1;
+    input1.param2 = fbpp::adapters::Int128("111");
+    input1.param3 = fbpp::adapters::Int128("222");
+    input1.param4 = fbpp::adapters::TTNumeric<2, -2>("111.11");
+    input1.param5 = fbpp::adapters::TTNumeric<2, -4>("222.2222");
+    input1.param6 = fbpp::adapters::TTNumeric<2, -8>("333.33333333");
+    input1.param7 = fbpp::adapters::TTNumeric<2, -18>("0.444444444444444444");
+    input1.param8 = fbpp::adapters::TTNumeric<1, -2>("555.55");
+    input1.param9 = fbpp::adapters::TTNumeric<1, -6>("666.666666");
+    input1.param10 = "Row 1";
+    insertTxn->execute(insertStmt, input1);
+
+    // Insert row 2
+    InsertTTMathTypesIn input2;
+    input2.param1 = 2;
+    input2.param2 = fbpp::adapters::Int128("777");
+    input2.param3 = fbpp::adapters::Int128("888");
+    input2.param4 = fbpp::adapters::TTNumeric<2, -2>("777.77");
+    input2.param5 = fbpp::adapters::TTNumeric<2, -4>("888.8888");
+    input2.param6 = fbpp::adapters::TTNumeric<2, -8>("999.99999999");
+    input2.param7 = fbpp::adapters::TTNumeric<2, -18>("0.101010101010101010");
+    input2.param8 = fbpp::adapters::TTNumeric<1, -2>("121.21");
+    input2.param9 = fbpp::adapters::TTNumeric<1, -6>("131.313131");
+    input2.param10 = "Row 2";
+    insertTxn->execute(insertStmt, input2);
+
+    insertTxn->Commit();
+
+    // Now select all rows
     auto txn = connection_->StartTransaction();
 
     auto stmt = connection_->prepareStatement(
@@ -243,7 +324,7 @@ TEST_F(QueryGeneratorTTMathTest, SelectAllTTMath) {
         }
     }
 
-    EXPECT_GT(rowCount, 0) << "Should have at least one row";
+    EXPECT_EQ(rowCount, 2) << "Should have exactly 2 rows";
 
     txn->Commit();
 }
