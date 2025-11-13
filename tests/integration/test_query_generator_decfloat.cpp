@@ -78,11 +78,11 @@ protected:
  */
 TEST_F(QueryGeneratorDecFloatTest, InsertAndSelectDecFloatTypes) {
     // Create prepared statements
-    auto insertStmt = connection_->PrepareStatement(
+    auto insertStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::InsertDecFloatTypes>::sql
     );
 
-    auto selectStmt = connection_->PrepareStatement(
+    auto selectStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::SelectDecFloatById>::sql
     );
 
@@ -146,15 +146,15 @@ TEST_F(QueryGeneratorDecFloatTest, InsertAndSelectDecFloatTypes) {
  */
 TEST_F(QueryGeneratorDecFloatTest, UpdateDecFloat34) {
     // Create prepared statements
-    auto insertStmt = connection_->PrepareStatement(
+    auto insertStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::InsertDecFloatTypes>::sql
     );
 
-    auto updateStmt = connection_->PrepareStatement(
+    auto updateStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::UpdateDecFloat34>::sql
     );
 
-    auto selectStmt = connection_->PrepareStatement(
+    auto selectStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::SelectDecFloatById>::sql
     );
 
@@ -215,11 +215,11 @@ TEST_F(QueryGeneratorDecFloatTest, UpdateDecFloat34) {
  */
 TEST_F(QueryGeneratorDecFloatTest, SelectDecFloat34Greater) {
     // Create prepared statements
-    auto insertStmt = connection_->PrepareStatement(
+    auto insertStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::InsertDecFloatTypes>::sql
     );
 
-    auto selectStmt = connection_->PrepareStatement(
+    auto selectStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::SelectDecFloat34Greater>::sql
     );
 
@@ -291,11 +291,11 @@ TEST_F(QueryGeneratorDecFloatTest, SelectDecFloat34Greater) {
  */
 TEST_F(QueryGeneratorDecFloatTest, SelectAllDecFloat) {
     // Create prepared statements
-    auto insertStmt = connection_->PrepareStatement(
+    auto insertStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::InsertDecFloatTypes>::sql
     );
 
-    auto selectStmt = connection_->PrepareStatement(
+    auto selectStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::SelectAllDecFloat>::sql
     );
 

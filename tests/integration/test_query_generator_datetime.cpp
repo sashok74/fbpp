@@ -80,11 +80,11 @@ protected:
  */
 TEST_F(QueryGeneratorDateTimeTest, InsertAndSelectDateTimeTypes) {
     // Create prepared statements
-    auto insertStmt = connection_->PrepareStatement(
+    auto insertStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::InsertDateTimeTypes>::sql
     );
 
-    auto selectStmt = connection_->PrepareStatement(
+    auto selectStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::SelectDateTimeById>::sql
     );
 
@@ -188,15 +188,15 @@ TEST_F(QueryGeneratorDateTimeTest, InsertAndSelectDateTimeTypes) {
  */
 TEST_F(QueryGeneratorDateTimeTest, UpdateTimestamp) {
     // Create prepared statements
-    auto insertStmt = connection_->PrepareStatement(
+    auto insertStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::InsertDateTimeTypes>::sql
     );
 
-    auto updateStmt = connection_->PrepareStatement(
+    auto updateStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::UpdateTimestamp>::sql
     );
 
-    auto selectStmt = connection_->PrepareStatement(
+    auto selectStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::SelectDateTimeById>::sql
     );
 
@@ -267,11 +267,11 @@ TEST_F(QueryGeneratorDateTimeTest, UpdateTimestamp) {
  */
 TEST_F(QueryGeneratorDateTimeTest, SelectDateGreater) {
     // Create prepared statements
-    auto insertStmt = connection_->PrepareStatement(
+    auto insertStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::InsertDateTimeTypes>::sql
     );
 
-    auto selectStmt = connection_->PrepareStatement(
+    auto selectStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::SelectDateGreater>::sql
     );
 
@@ -361,11 +361,11 @@ TEST_F(QueryGeneratorDateTimeTest, SelectDateGreater) {
  */
 TEST_F(QueryGeneratorDateTimeTest, SelectAllDateTime) {
     // Create prepared statements
-    auto insertStmt = connection_->PrepareStatement(
+    auto insertStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::InsertDateTimeTypes>::sql
     );
 
-    auto selectStmt = connection_->PrepareStatement(
+    auto selectStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::SelectAllDateTime>::sql
     );
 

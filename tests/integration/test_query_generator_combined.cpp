@@ -82,11 +82,11 @@ protected:
  */
 TEST_F(QueryGeneratorCombinedTest, InsertAndSelectAllAdapters) {
     // Create prepared statements
-    auto insertStmt = connection_->PrepareStatement(
+    auto insertStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::InsertAllTypes>::sql
     );
 
-    auto selectStmt = connection_->PrepareStatement(
+    auto selectStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::SelectAllTypesById>::sql
     );
 
@@ -178,11 +178,11 @@ TEST_F(QueryGeneratorCombinedTest, InsertAndSelectAllAdapters) {
  */
 TEST_F(QueryGeneratorCombinedTest, SelectAllCombined) {
     // Create prepared statements
-    auto insertStmt = connection_->PrepareStatement(
+    auto insertStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::InsertAllTypes>::sql
     );
 
-    auto selectStmt = connection_->PrepareStatement(
+    auto selectStmt = connection_->prepareStatement(
         QueryDescriptor<QueryId::SelectAllCombined>::sql
     );
 
