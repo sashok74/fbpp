@@ -2,6 +2,7 @@
 // This test verifies that generated code with TTMath adapters compiles and works correctly
 
 #include <gtest/gtest.h>
+#include "../test_base.hpp"
 
 // Include the generated headers
 #include "/tmp/generated_queries_ttmath.hpp"
@@ -13,25 +14,39 @@
 #include "fbpp/adapters/ttmath_numeric.hpp"
 
 using namespace fbpp::core;
+using namespace fbpp::test;
 using namespace generated::queries;
 
-class QueryGeneratorTTMathTest : public ::testing::Test {
+class QueryGeneratorTTMathTest : public TempDatabaseTest {
 protected:
     void SetUp() override {
-        ConnectionParams params;
-        params.database = "192.168.7.248:/mnt/test/binding_test.fdb";
-        params.user = "SYSDBA";
-        params.password = "planomer";
-        params.charset = "UTF8";
+        // Вызвать базовый SetUp - создаст временную БД
+        TempDatabaseTest::SetUp();
 
-        connection_ = std::make_unique<Connection>(params);
+        // Создать схему для тестов TTMath
+        createTestSchema();
     }
 
-    void TearDown() override {
-        connection_.reset();
+    void createTestSchema() override {
+        // Создаем таблицу TTMATH_TEST с нужными полями
+        connection_->ExecuteDDL(
+            "CREATE TABLE TTMATH_TEST ("
+            "    F_ID INTEGER NOT NULL PRIMARY KEY,"
+            "    F_INT128_PURE INT128,"
+            "    F_INT128_NULLABLE INT128,"
+            "    F_NUMERIC38_2 NUMERIC(38, 2),"
+            "    F_NUMERIC38_4 NUMERIC(38, 4),"
+            "    F_NUMERIC38_8 NUMERIC(38, 8),"
+            "    F_NUMERIC38_18 NUMERIC(38, 18),"
+            "    F_NUMERIC18_2 NUMERIC(18, 2),"
+            "    F_NUMERIC18_6 NUMERIC(18, 6),"
+            "    F_NAME VARCHAR(100)"
+            ")"
+        );
     }
 
-    std::unique_ptr<Connection> connection_;
+    // connection_ и db_params_ наследуются из TempDatabaseTest
+    // TearDown() не нужен - базовый класс удалит временную БД
 };
 
 TEST_F(QueryGeneratorTTMathTest, GeneratedTypesCompile) {
@@ -54,11 +69,11 @@ TEST_F(QueryGeneratorTTMathTest, GeneratedTypesCompile) {
 }
 
 TEST_F(QueryGeneratorTTMathTest, InsertAndSelectTTMathTypes) {
-    Transaction txn(*connection_);
+    auto txn = connection_->StartTransaction();
 
     // Prepare insert statement
-    auto stmt = connection_->prepare(
-        QueryDescriptor<QueryId::InsertTTMathTypes>::positionalSql
+    auto stmt = connection_->prepareStatement(
+        std::string(QueryDescriptor<QueryId::InsertTTMathTypes>::positionalSql)
     );
 
     // Create input data using TTMath adapters
@@ -75,22 +90,23 @@ TEST_F(QueryGeneratorTTMathTest, InsertAndSelectTTMathTypes) {
     input.param10 = "Test TTMath";  // F_NAME
 
     // Execute insert
-    stmt.execute(txn, input);
-    txn.commit();
+    auto affected = txn->execute(stmt, input);
+    EXPECT_EQ(affected, 1);
+    txn->Commit();
 
     // Select back the data
-    Transaction selectTxn(*connection_);
-    auto selectStmt = connection_->prepare(
-        QueryDescriptor<QueryId::SelectTTMathById>::positionalSql
+    auto selectTxn = connection_->StartTransaction();
+    auto selectStmt = connection_->prepareStatement(
+        std::string(QueryDescriptor<QueryId::SelectTTMathById>::positionalSql)
     );
 
     SelectTTMathByIdIn selectInput;
     selectInput.param1 = 1;
 
-    auto resultSet = selectStmt.executeQuery(selectTxn, selectInput);
+    auto resultSet = selectStmt->executeQuery(*selectTxn, selectInput);
 
     // Fetch and verify
-    auto output = resultSet.fetchOne<SelectTTMathByIdOut>();
+    auto output = resultSet->fetchOne<SelectTTMathByIdOut>();
     ASSERT_TRUE(output.has_value());
 
     // Verify INT128 values
@@ -113,14 +129,14 @@ TEST_F(QueryGeneratorTTMathTest, InsertAndSelectTTMathTypes) {
     ASSERT_TRUE(output->fName.has_value());
     EXPECT_EQ(*output->fName, "Test TTMath");
 
-    selectTxn.commit();
+    selectTxn->Commit();
 }
 
 TEST_F(QueryGeneratorTTMathTest, UpdateNumericTypes) {
-    Transaction txn(*connection_);
+    auto txn = connection_->StartTransaction();
 
-    auto updateStmt = connection_->prepare(
-        QueryDescriptor<QueryId::UpdateNumeric38>::positionalSql
+    auto updateStmt = connection_->prepareStatement(
+        std::string(QueryDescriptor<QueryId::UpdateNumeric38>::positionalSql)
     );
 
     UpdateNumeric38In updateInput;
@@ -128,17 +144,18 @@ TEST_F(QueryGeneratorTTMathTest, UpdateNumericTypes) {
     updateInput.param2 = fbpp::adapters::TTNumeric<2, -8>("999999999999.99999999");    // F_NUMERIC38_8
     updateInput.param3 = 1;  // F_ID
 
-    updateStmt.execute(txn, updateInput);
-    txn.commit();
+    auto affected = txn->execute(updateStmt, updateInput);
+    EXPECT_EQ(affected, 1);
+    txn->Commit();
 
     // Verify update
-    Transaction selectTxn(*connection_);
-    auto selectStmt = connection_->prepare(
+    auto selectTxn = connection_->StartTransaction();
+    auto selectStmt = connection_->prepareStatement(
         "SELECT F_NUMERIC38_2, F_NUMERIC38_8 FROM TTMATH_TEST WHERE F_ID = ?"
     );
 
-    auto resultSet = selectStmt.executeQuery(selectTxn, std::make_tuple(1));
-    auto result = resultSet.fetchOne<fbpp::adapters::TTNumeric<2, -2>, fbpp::adapters::TTNumeric<2, -8>>();
+    auto resultSet = selectStmt->executeQuery(*selectTxn, std::make_tuple(1));
+    auto result = resultSet->fetchOne<fbpp::adapters::TTNumeric<2, -2>, fbpp::adapters::TTNumeric<2, -8>>();
 
     ASSERT_TRUE(result.has_value());
     auto [numeric38_2, numeric38_8] = *result;
@@ -146,23 +163,23 @@ TEST_F(QueryGeneratorTTMathTest, UpdateNumericTypes) {
     EXPECT_EQ(numeric38_2.toString(), "99999999999999999999.99");
     EXPECT_EQ(numeric38_8.toString(), "999999999999.99999999");
 
-    selectTxn.commit();
+    selectTxn->Commit();
 }
 
 TEST_F(QueryGeneratorTTMathTest, SelectScaledTypesWithFilter) {
-    Transaction txn(*connection_);
+    auto txn = connection_->StartTransaction();
 
-    auto stmt = connection_->prepare(
-        QueryDescriptor<QueryId::SelectScaledTypes>::positionalSql
+    auto stmt = connection_->prepareStatement(
+        std::string(QueryDescriptor<QueryId::SelectScaledTypes>::positionalSql)
     );
 
     SelectScaledTypesIn input;
     input.param1 = fbpp::adapters::TTNumeric<2, -2>("0.00");  // Filter: F_NUMERIC38_2 > 0
 
-    auto resultSet = stmt.executeQuery(txn, input);
+    auto resultSet = stmt->executeQuery(*txn, input);
 
     // Should return the row we inserted
-    auto output = resultSet.fetchOne<SelectScaledTypesOut>();
+    auto output = resultSet->fetchOne<SelectScaledTypesOut>();
     ASSERT_TRUE(output.has_value());
 
     // Verify scaled numeric types are present
@@ -170,23 +187,23 @@ TEST_F(QueryGeneratorTTMathTest, SelectScaledTypesWithFilter) {
     EXPECT_FALSE(output->fNumeric388.toString().empty());
     EXPECT_FALSE(output->fNumeric182.toString().empty());
 
-    txn.commit();
+    txn->Commit();
 }
 
 TEST_F(QueryGeneratorTTMathTest, SelectAllTTMath) {
-    Transaction txn(*connection_);
+    auto txn = connection_->StartTransaction();
 
-    auto stmt = connection_->prepare(
-        QueryDescriptor<QueryId::SelectAllTTMath>::positionalSql
+    auto stmt = connection_->prepareStatement(
+        std::string(QueryDescriptor<QueryId::SelectAllTTMath>::positionalSql)
     );
 
     SelectAllTTMathIn input;  // No parameters
 
-    auto resultSet = stmt.executeQuery(txn, input);
+    auto resultSet = stmt->executeQuery(*txn, input);
 
     // Fetch all rows
     int rowCount = 0;
-    while (auto row = resultSet.fetchOne<SelectAllTTMathOut>()) {
+    while (auto row = resultSet->fetchOne<SelectAllTTMathOut>()) {
         rowCount++;
 
         // Verify structure
@@ -201,5 +218,5 @@ TEST_F(QueryGeneratorTTMathTest, SelectAllTTMath) {
 
     EXPECT_GT(rowCount, 0) << "Should have at least one row";
 
-    txn.commit();
+    txn->Commit();
 }
