@@ -470,7 +470,7 @@ TEST_F(QueryGeneratorDateTimeTest, GeneratedTypesCompile) {
     static_assert(QueryDescriptor<QueryId::InsertDateTimeTypes>::id == QueryId::InsertDateTimeTypes);
 
     auto queryName = QueryDescriptor<QueryId::InsertDateTimeTypes>::name;
-    EXPECT_STREQ(queryName, "InsertDateTimeTypes");
+    EXPECT_EQ(std::string(queryName), "InsertDateTimeTypes");
 
     // Test struct instantiation
     InsertDateTimeTypesIn input;

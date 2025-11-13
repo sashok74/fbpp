@@ -120,14 +120,14 @@ TEST_F(QueryGeneratorDecFloatTest, InsertAndSelectDecFloatTypes) {
 
     // Verify nullable DECFLOAT16
     ASSERT_TRUE(std::get<1>(result).has_value());
-    EXPECT_EQ(std::get<1>(result)->to_string(), "789.012");
+    EXPECT_EQ(std::get<1>(result)->toString(), "789.012");
 
     // Verify DECFLOAT34 values
     EXPECT_EQ(std::get<2>(result).toString(), "123456789012345678901234567890.1234");
 
     // Verify nullable DECFLOAT34
     ASSERT_TRUE(std::get<3>(result).has_value());
-    EXPECT_EQ(std::get<3>(result)->to_string(), "987654321098765432109876543210.9876");
+    EXPECT_EQ(std::get<3>(result)->toString(), "987654321098765432109876543210.9876");
 
     // Verify name
     EXPECT_EQ(std::get<4>(result), "Test DecFloat");
@@ -342,10 +342,10 @@ TEST_F(QueryGeneratorDecFloatTest, SelectAllDecFloat) {
     EXPECT_EQ(std::get<0>(result), 1);
     EXPECT_EQ(std::get<1>(result).toString(), "111.111");
     ASSERT_TRUE(std::get<2>(result).has_value());
-    EXPECT_EQ(std::get<2>(result)->to_string(), "222.222");
+    EXPECT_EQ(std::get<2>(result)->toString(), "222.222");
     EXPECT_EQ(std::get<3>(result).toString(), "333333333333333333.333333");
     ASSERT_TRUE(std::get<4>(result).has_value());
-    EXPECT_EQ(std::get<4>(result)->to_string(), "444444444444444444.444444");
+    EXPECT_EQ(std::get<4>(result)->toString(), "444444444444444444.444444");
     EXPECT_EQ(std::get<5>(result), "First");
 
     // Second row
@@ -374,7 +374,7 @@ TEST_F(QueryGeneratorDecFloatTest, GeneratedTypesCompile) {
     static_assert(QueryDescriptor<QueryId::InsertDecFloatTypes>::id == QueryId::InsertDecFloatTypes);
 
     auto queryName = QueryDescriptor<QueryId::InsertDecFloatTypes>::name;
-    EXPECT_STREQ(queryName, "InsertDecFloatTypes");
+    EXPECT_EQ(std::string(queryName), "InsertDecFloatTypes");
 
     // Test struct instantiation
     InsertDecFloatTypesIn input;

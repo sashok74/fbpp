@@ -279,7 +279,7 @@ TEST_F(QueryGeneratorCombinedTest, GeneratedTypesCompile) {
     static_assert(QueryDescriptor<QueryId::InsertAllTypes>::id == QueryId::InsertAllTypes);
 
     auto queryName = QueryDescriptor<QueryId::InsertAllTypes>::name;
-    EXPECT_STREQ(queryName, "InsertAllTypes");
+    EXPECT_EQ(std::string(queryName), "InsertAllTypes");
 
     // Test struct instantiation with all adapter types
     InsertAllTypesIn input;
