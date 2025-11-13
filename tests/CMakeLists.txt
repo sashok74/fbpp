@@ -338,52 +338,65 @@ endforeach()
 
 # TTMath integration tests with automatic header generation
 set(GENERATED_TTMATH_HEADER "${CMAKE_BINARY_DIR}/generated_queries_ttmath.hpp")
+set(GENERATED_TTMATH_SUPPORT "${CMAKE_BINARY_DIR}/generated_queries_ttmath_support.hpp")
 set(TTMATH_QUERIES_JSON "${CMAKE_SOURCE_DIR}/tests/test_data/query_generator_ttmath_queries.json")
 
-# Get database configuration from environment variables (with fallbacks from config)
-if(NOT DEFINED ENV{FIREBIRD_HOST})
-    set(ENV{FIREBIRD_HOST} "firebird5.home.lan")
-endif()
-if(NOT DEFINED ENV{FIREBIRD_PORT})
-    set(ENV{FIREBIRD_PORT} "3050")
-endif()
-if(NOT DEFINED ENV{FIREBIRD_USER})
-    set(ENV{FIREBIRD_USER} "SYSDBA")
-endif()
-if(NOT DEFINED ENV{FIREBIRD_PASSWORD})
-    set(ENV{FIREBIRD_PASSWORD} "planomer")
-endif()
-if(NOT DEFINED ENV{FIREBIRD_PERSISTENT_DB_PATH})
-    set(ENV{FIREBIRD_PERSISTENT_DB_PATH} "testdb")
+# Get database configuration from environment variables (with fallbacks)
+# These are evaluated at CMake configure time
+if(DEFINED ENV{FIREBIRD_HOST})
+    set(FIREBIRD_HOST "$ENV{FIREBIRD_HOST}")
+else()
+    set(FIREBIRD_HOST "firebird5.home.lan")
 endif()
 
-set(FIREBIRD_DSN "$ENV{FIREBIRD_HOST}:$ENV{FIREBIRD_PERSISTENT_DB_PATH}")
+if(DEFINED ENV{FIREBIRD_PERSISTENT_DB_PATH})
+    set(FIREBIRD_DB_PATH "$ENV{FIREBIRD_PERSISTENT_DB_PATH}")
+else()
+    set(FIREBIRD_DB_PATH "testdb")
+endif()
+
+if(DEFINED ENV{FIREBIRD_USER})
+    set(FIREBIRD_USER "$ENV{FIREBIRD_USER}")
+else()
+    set(FIREBIRD_USER "SYSDBA")
+endif()
+
+if(DEFINED ENV{FIREBIRD_PASSWORD})
+    set(FIREBIRD_PASSWORD "$ENV{FIREBIRD_PASSWORD}")
+else()
+    set(FIREBIRD_PASSWORD "planomer")
+endif()
+
+set(FIREBIRD_DSN "${FIREBIRD_HOST}:${FIREBIRD_DB_PATH}")
 
 message(STATUS "TTMath integration test configuration:")
 message(STATUS "  DSN: ${FIREBIRD_DSN}")
+message(STATUS "  User: ${FIREBIRD_USER}")
 message(STATUS "  Queries JSON: ${TTMATH_QUERIES_JSON}")
 message(STATUS "  Output header: ${GENERATED_TTMATH_HEADER}")
+message(STATUS "  Support header: ${GENERATED_TTMATH_SUPPORT}")
 
 # Custom command to generate header using query_generator
 # This runs at build time, after query_generator is built
 add_custom_command(
-    OUTPUT ${GENERATED_TTMATH_HEADER}
+    OUTPUT ${GENERATED_TTMATH_HEADER} ${GENERATED_TTMATH_SUPPORT}
     COMMAND $<TARGET_FILE:query_generator>
         --use-ttmath-numeric
         --use-ttmath-int128
         --dsn ${FIREBIRD_DSN}
-        --user $ENV{FIREBIRD_USER}
-        --password $ENV{FIREBIRD_PASSWORD}
+        --user ${FIREBIRD_USER}
+        --password ${FIREBIRD_PASSWORD}
         --input ${TTMATH_QUERIES_JSON}
         --output ${GENERATED_TTMATH_HEADER}
+        --support ${GENERATED_TTMATH_SUPPORT}
     DEPENDS query_generator ${TTMATH_QUERIES_JSON}
     COMMENT "Generating TTMath query header from ${TTMATH_QUERIES_JSON}"
     VERBATIM
 )
 
-# Custom target to ensure header is generated
+# Custom target to ensure headers are generated
 add_custom_target(generate_ttmath_queries
-    DEPENDS ${GENERATED_TTMATH_HEADER}
+    DEPENDS ${GENERATED_TTMATH_HEADER} ${GENERATED_TTMATH_SUPPORT}
 )
 
 # Test: query_generator with TTMath adapters (full E2E integration test)
