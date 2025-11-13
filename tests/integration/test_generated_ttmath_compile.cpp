@@ -25,8 +25,8 @@ int main() {
     // Test struct instantiation
     generated::queries::InsertTTMathTypesIn insertInput;
     insertInput.param1 = 1;
-    insertInput.param2 = fbpp::adapters::TTInt128("12345678901234567890");
-    insertInput.param3 = fbpp::adapters::TTInt128("98765432109876543210");
+    insertInput.param2 = fbpp::adapters::Int128("12345678901234567890");
+    insertInput.param3 = fbpp::adapters::Int128("98765432109876543210");
     insertInput.param4 = n38_2;
     insertInput.param5 = n38_4;
     insertInput.param6 = n38_8;
@@ -47,7 +47,7 @@ int main() {
     // Test output struct
     generated::queries::SelectAllTTMathOut output;
     output.fId = 42;
-    output.fInt128Pure = fbpp::adapters::TTInt128("123456789");
+    output.fInt128Pure = fbpp::adapters::Int128("123456789");
     output.fNumeric382 = n38_2;
     output.fNumeric388 = n38_8;
     output.fNumeric182 = n18_2;

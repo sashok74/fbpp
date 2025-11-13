@@ -80,8 +80,8 @@ TEST_F(QueryGeneratorTTMathTest, InsertAndSelectTTMathTypes) {
     // Create input data using TTMath adapters
     InsertTTMathTypesIn input;
     input.param1 = 1;  // F_ID
-    input.param2 = fbpp::adapters::TTInt128("123456789012345678901234567890");  // F_INT128_PURE
-    input.param3 = fbpp::adapters::TTInt128("987654321098765432109876543210");  // F_INT128_NULLABLE
+    input.param2 = fbpp::adapters::Int128("123456789012345678901234567890");  // F_INT128_PURE
+    input.param3 = fbpp::adapters::Int128("987654321098765432109876543210");  // F_INT128_NULLABLE
     input.param4 = fbpp::adapters::TTNumeric<2, -2>("12345678901234567890.12");  // F_NUMERIC38_2
     input.param5 = fbpp::adapters::TTNumeric<2, -4>("1234567890123456.1234");    // F_NUMERIC38_4
     input.param6 = fbpp::adapters::TTNumeric<2, -8>("123456789012.12345678");    // F_NUMERIC38_8
