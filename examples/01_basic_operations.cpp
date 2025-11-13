@@ -35,7 +35,7 @@
 #include <format>
 #endif
 #include <fbpp/fbpp_all.hpp>
-#include <nlohmann/json.hpp>
+#include <fbpp_util/connection_helper.hpp>
 #include <ttmath/ttmath.h>
 #include <decimal>
 
@@ -87,61 +87,17 @@ int main() {
     printHeader("Firebird C++ Wrapper (fbpp) - Connection Example");
     
     try {
-        // Загружаем конфигурацию
+        // Получаем параметры подключения из конфига (секция "db")
+        // с автоматическим переопределением из ENV переменных
         std::cout << "Загрузка конфигурации...\n";
-        
-        // Try multiple paths to find the config file (как в FbppTestBase)
-        std::vector<std::string> paths = {
-            "../../config/test_config.json",  // From build/examples
-            "../config/test_config.json",      // From build
-            "config/test_config.json",         // From project root
-            "./test_config.json"               // Current directory
-        };
-        
-        std::ifstream config_file;
-        std::string config_path;
-        for (const auto& path : paths) {
-            config_file.open(path);
-            if (config_file.is_open()) {
-                config_path = path;
-                break;
-            }
-        }
-        
-        if (!config_file.is_open()) {
-            throw std::runtime_error("Не найден файл конфигурации test_config.json");
-        }
-        
-        auto config = nlohmann::json::parse(config_file);
-        
-        // Читаем параметры для persistent_db из конфига
-        auto db_config = config["tests"]["persistent_db"];
-        
-        // Формируем строку подключения: server:path
-        std::string server = "firebird5";  // В конфиге поле server пустое, используем значение по умолчанию
-        if (db_config.contains("server") && !db_config["server"].empty()) {
-            server = db_config["server"];
-        }
-        std::string path = db_config["path"];
-        std::string database = server + ":" + path;
-        std::string username = db_config["user"];
-        std::string password = db_config["password"];
-        std::string charset = db_config["charset"];
-        
-        printInfo("Config file", config_path);
-        printInfo("Database", database);
-        printInfo("Username", username);
-        printInfo("Charset", charset);
-        
+        auto params = fbpp::util::getConnectionParams("db");
+
+        printInfo("Database", params.database);
+        printInfo("Username", params.user);
+        printInfo("Charset", params.charset);
+
         std::cout << "\nПодключение к базе данных...\n";
-        
-        // Создаем параметры подключения
-        fbpp::core::ConnectionParams params;
-        params.database = database;
-        params.user = username;
-        params.password = password;
-        params.charset = charset;
-        
+
         // Создаем подключение к существующей базе данных
         auto connection = std::make_unique<fbpp::core::Connection>(params);
         

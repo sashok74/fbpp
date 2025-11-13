@@ -24,6 +24,7 @@
 #include <ttmath/ttmath.h>
 #include <decimal>
 #include <fbpp/fbpp_all.hpp>  // Включает все, включая batch и адаптеры
+#include <fbpp_util/connection_helper.hpp>
 #include <nlohmann/json.hpp>
 
 // Типы из библиотек
@@ -141,36 +142,12 @@ private:
     void initConnection() {
         std::cout << "Подключение к базе данных...\n";
 
-        // Загрузка конфигурации
-        std::vector<std::string> paths = {
-            "../../config/test_config.json",
-            "../config/test_config.json",
-            "config/test_config.json",
-            "./test_config.json"
-        };
-
-        std::ifstream config_file;
-        for (const auto& path : paths) {
-            config_file.open(path);
-            if (config_file.is_open()) break;
-        }
-
-        if (!config_file.is_open()) {
-            throw std::runtime_error("Не найден файл конфигурации");
-        }
-
-        auto config = nlohmann::json::parse(config_file);
-        auto db_config = config["tests"]["persistent_db"];
-
-        fbpp::core::ConnectionParams params;
-        params.database = std::string(db_config.value("server", "firebird5")) + ":" +
-                         std::string(db_config["path"]);
-        params.user = db_config["user"];
-        params.password = db_config["password"];
-        params.charset = db_config["charset"];
+        auto params = fbpp::util::getConnectionParams("tests.persistent_db");
 
         connection = std::make_unique<fbpp::core::Connection>(params);
-        std::cout << "✓ Подключение установлено\n\n";
+        std::cout << "✓ Подключение установлено\n";
+        std::cout << "  Database: " << params.database << "\n";
+        std::cout << "  User: " << params.user << "\n\n";
     }
 
     void getMaxKey() {

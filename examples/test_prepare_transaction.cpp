@@ -12,6 +12,7 @@
 #include <iostream>
 #include <memory>
 #include <fbpp/fbpp.hpp>
+#include <fbpp_util/connection_helper.hpp>
 #include <fstream>
 #include <nlohmann/json.hpp>
 
@@ -29,49 +30,13 @@ int main() {
 
     try {
         // Загрузка конфигурации
-        std::vector<std::string> paths = {
-            "../../config/test_config.json",
-            "../config/test_config.json",
-            "config/test_config.json",
-            "./test_config.json"
-        };
-
-        std::ifstream config_file;
-        std::string config_path;
-        for (const auto& path : paths) {
-            config_file.open(path);
-            if (config_file.is_open()) {
-                config_path = path;
-                break;
-            }
-        }
-
-        if (!config_file.is_open()) {
-            throw std::runtime_error("Config file test_config.json not found");
-        }
-
-        auto config = json::parse(config_file);
-        auto db_config = config["tests"]["persistent_db"];
-
-        std::string server = "firebird5";
-        if (db_config.contains("server") && !db_config["server"].empty()) {
-            server = db_config["server"];
-        }
-        std::string path = db_config["path"];
-        std::string database = server + ":" + path;
-        std::string username = db_config["user"];
-        std::string password = db_config["password"];
-        std::string charset = db_config["charset"];
-
-        // Подключение к базе данных
-        ConnectionParams params;
-        params.database = database;
-        params.user = username;
-        params.password = password;
-        params.charset = charset;
+        auto params = fbpp::util::getConnectionParams("tests.persistent_db");
+        std::cout << "Configuration loaded successfully\n";
+        std::cout << "  Database: " << params.database << "\n";
+        std::cout << "  User: " << params.user << "\n\n";
 
         auto connection = std::make_unique<Connection>(params);
-        std::cout << "Connected to: " << database << "\n\n";
+        std::cout << "Connected to: " << params.database << "\n\n";
 
         // ====================================================================
         // ТЕСТ 1: prepareStatement БЕЗ активной транзакции

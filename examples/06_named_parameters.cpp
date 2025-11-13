@@ -9,6 +9,7 @@
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/statement.hpp"
 #include "fbpp/core/result_set.hpp"
+#include <fbpp_util/connection_helper.hpp>
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <iomanip>
@@ -33,52 +34,13 @@ int main() {
         printHeader("Named Parameters Example with TABLE_TEST_1");
 
         // Load configuration
-        std::vector<std::string> paths = {
-            "../../config/test_config.json",
-            "../config/test_config.json",
-            "config/test_config.json",
-            "./test_config.json"
-        };
+        auto params = fbpp::util::getConnectionParams("tests.persistent_db");
 
-        std::ifstream config_file;
-        for (const auto& path : paths) {
-            config_file.open(path);
-            if (config_file.is_open()) {
-                std::cout << "Конфигурация загружена из: " << path << "\n";
-                break;
-            }
-        }
-
-        if (!config_file.is_open()) {
-            std::cerr << "Не найден файл конфигурации test_config.json\n";
-            std::cerr << "Убедитесь, что файл находится в одном из путей:\n";
-            for (const auto& path : paths) {
-                std::cerr << "  - " << path << "\n";
-            }
-            return 1;
-        }
-
-        auto config = nlohmann::json::parse(config_file);
-        auto db_config = config["tests"]["persistent_db"];
-
-        std::string database = std::string(db_config.value("server", "firebird5")) + ":" +
-                              std::string(db_config["path"]);
-        std::string username = db_config["user"];
-        std::string password = db_config["password"];
-        std::string charset = db_config["charset"];
-
-        printInfo("Database", database);
-        printInfo("User", username);
-        printInfo("Charset", charset);
+        printInfo("Database", params.database);
+        printInfo("User", params.user);
+        printInfo("Charset", params.charset);
 
         std::cout << "\nПодключение к базе данных...\n";
-
-        // Create connection parameters
-        ConnectionParams params;
-        params.database = database;
-        params.user = username;
-        params.password = password;
-        params.charset = charset;
 
         // Connect to existing database
         auto connection = std::make_unique<Connection>(params);
