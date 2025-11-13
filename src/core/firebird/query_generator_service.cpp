@@ -134,7 +134,7 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput, const AdapterCon
             } else {
                 // Pure INT128 (no scale)
                 if (config.useTTMathInt128) {
-                    result.cppType = "fbpp::adapters::TTInt128";
+                    result.cppType = "fbpp::adapters::Int128";
                     result.needsTTMath = true;
                 } else {
                     result.cppType = "fbpp::core::Int128";
