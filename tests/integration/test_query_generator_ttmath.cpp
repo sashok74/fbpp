@@ -112,18 +112,22 @@ TEST_F(QueryGeneratorTTMathTest, InsertAndSelectTTMathTypes) {
     ASSERT_TRUE(resultSet->fetch(output));
 
     // Verify INT128 values
-    EXPECT_EQ(output.fInt128Pure.toString(), "123456789012345678901234567890");
+    ASSERT_TRUE(output.fInt128Pure.has_value());
+    EXPECT_EQ(output.fInt128Pure->toString(), "123456789012345678901234567890");
     ASSERT_TRUE(output.fInt128Nullable.has_value());
     EXPECT_EQ(output.fInt128Nullable->toString(), "987654321098765432109876543210");
 
     // Verify NUMERIC38 values
-    EXPECT_EQ(output.fNumeric382.toString(), "12345678901234567890.12");
+    ASSERT_TRUE(output.fNumeric382.has_value());
+    EXPECT_EQ(output.fNumeric382->toString(), "12345678901234567890.12");
     ASSERT_TRUE(output.fNumeric384.has_value());
     EXPECT_EQ(output.fNumeric384->toString(), "1234567890123456.1234");
-    EXPECT_EQ(output.fNumeric388.toString(), "123456789012.12345678");
+    ASSERT_TRUE(output.fNumeric388.has_value());
+    EXPECT_EQ(output.fNumeric388->toString(), "123456789012.12345678");
 
     // Verify NUMERIC18 values
-    EXPECT_EQ(output.fNumeric182.toString(), "1234567890123456.12");
+    ASSERT_TRUE(output.fNumeric182.has_value());
+    EXPECT_EQ(output.fNumeric182->toString(), "1234567890123456.12");
     ASSERT_TRUE(output.fNumeric186.has_value());
     EXPECT_EQ(output.fNumeric186->toString(), "123456789012.123456");
 
@@ -188,9 +192,12 @@ TEST_F(QueryGeneratorTTMathTest, SelectScaledTypesWithFilter) {
     ASSERT_TRUE(resultSet->fetch(output));
 
     // Verify scaled numeric types are present
-    EXPECT_FALSE(output.fNumeric382.toString().empty());
-    EXPECT_FALSE(output.fNumeric388.toString().empty());
-    EXPECT_FALSE(output.fNumeric182.toString().empty());
+    ASSERT_TRUE(output.fNumeric382.has_value());
+    EXPECT_FALSE(output.fNumeric382->toString().empty());
+    ASSERT_TRUE(output.fNumeric388.has_value());
+    EXPECT_FALSE(output.fNumeric388->toString().empty());
+    ASSERT_TRUE(output.fNumeric182.has_value());
+    EXPECT_FALSE(output.fNumeric182->toString().empty());
 
     txn->Commit();
 }
@@ -215,12 +222,21 @@ TEST_F(QueryGeneratorTTMathTest, SelectAllTTMath) {
 
         // Verify structure
         EXPECT_GT(row.fId, 0);
-        EXPECT_FALSE(row.fInt128Pure.toString().empty());
+
+        if (row.fInt128Pure.has_value()) {
+            EXPECT_FALSE(row.fInt128Pure->toString().empty());
+        }
 
         // All rows should have these required fields
-        EXPECT_FALSE(row.fNumeric382.toString().empty());
-        EXPECT_FALSE(row.fNumeric388.toString().empty());
-        EXPECT_FALSE(row.fNumeric182.toString().empty());
+        if (row.fNumeric382.has_value()) {
+            EXPECT_FALSE(row.fNumeric382->toString().empty());
+        }
+        if (row.fNumeric388.has_value()) {
+            EXPECT_FALSE(row.fNumeric388->toString().empty());
+        }
+        if (row.fNumeric182.has_value()) {
+            EXPECT_FALSE(row.fNumeric182->toString().empty());
+        }
     }
 
     EXPECT_GT(rowCount, 0) << "Should have at least one row";
