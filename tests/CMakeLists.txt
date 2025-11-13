@@ -336,45 +336,92 @@ endforeach()
 # Integration tests
 # ============================================================================
 
-# TTMath integration tests require pre-generated header file
-set(GENERATED_TTMATH_HEADER "/tmp/generated_queries_ttmath.hpp")
+# TTMath integration tests with automatic header generation
+set(GENERATED_TTMATH_HEADER "${CMAKE_BINARY_DIR}/generated_queries_ttmath.hpp")
+set(TTMATH_QUERIES_JSON "${CMAKE_SOURCE_DIR}/tests/test_data/query_generator_ttmath_queries.json")
 
-if(EXISTS "${GENERATED_TTMATH_HEADER}")
-    message(STATUS "Found generated TTMath header - enabling integration tests")
-
-    # Test: query_generator with TTMath adapters
-    # This test verifies generated code with TTMath adapters compiles and works
-    add_executable(test_query_generator_ttmath
-        integration/test_query_generator_ttmath.cpp
-        test_base.cpp
-    )
-
-    target_link_libraries(test_query_generator_ttmath PRIVATE
-        fbpp
-        GTest::gtest
-        GTest::gtest_main
-        nlohmann_json::nlohmann_json
-        ${FIREBIRD_LIBRARIES}
-    )
-
-    gtest_discover_tests(test_query_generator_ttmath)
-
-    # Test: Standalone compilation test for generated TTMath code
-    # This is NOT a GTest test - it's a standalone executable that verifies
-    # the generated code compiles correctly
-    add_executable(test_generated_ttmath_compile
-        integration/test_generated_ttmath_compile.cpp
-    )
-
-    target_link_libraries(test_generated_ttmath_compile PRIVATE
-        fbpp
-        ${FIREBIRD_LIBRARIES}
-    )
-else()
-    message(STATUS "Skipping TTMath integration tests - generated header not found: ${GENERATED_TTMATH_HEADER}")
-    message(STATUS "To enable these tests, generate the header file first:")
-    message(STATUS "  query_generator --use-ttmath-numeric --use-ttmath-int128 \\")
-    message(STATUS "    --dsn <server>:<database> --user <user> --password <password> \\")
-    message(STATUS "    --input tests/data/ttmath_test_queries.json \\")
-    message(STATUS "    --output /tmp/generated_queries_ttmath.hpp")
+# Get database configuration from environment variables (with fallbacks from config)
+if(NOT DEFINED ENV{FIREBIRD_HOST})
+    set(ENV{FIREBIRD_HOST} "firebird5.home.lan")
 endif()
+if(NOT DEFINED ENV{FIREBIRD_PORT})
+    set(ENV{FIREBIRD_PORT} "3050")
+endif()
+if(NOT DEFINED ENV{FIREBIRD_USER})
+    set(ENV{FIREBIRD_USER} "SYSDBA")
+endif()
+if(NOT DEFINED ENV{FIREBIRD_PASSWORD})
+    set(ENV{FIREBIRD_PASSWORD} "planomer")
+endif()
+if(NOT DEFINED ENV{FIREBIRD_PERSISTENT_DB_PATH})
+    set(ENV{FIREBIRD_PERSISTENT_DB_PATH} "testdb")
+endif()
+
+set(FIREBIRD_DSN "$ENV{FIREBIRD_HOST}:$ENV{FIREBIRD_PERSISTENT_DB_PATH}")
+
+message(STATUS "TTMath integration test configuration:")
+message(STATUS "  DSN: ${FIREBIRD_DSN}")
+message(STATUS "  Queries JSON: ${TTMATH_QUERIES_JSON}")
+message(STATUS "  Output header: ${GENERATED_TTMATH_HEADER}")
+
+# Custom command to generate header using query_generator
+# This runs at build time, after query_generator is built
+add_custom_command(
+    OUTPUT ${GENERATED_TTMATH_HEADER}
+    COMMAND $<TARGET_FILE:query_generator>
+        --use-ttmath-numeric
+        --use-ttmath-int128
+        --dsn ${FIREBIRD_DSN}
+        --user $ENV{FIREBIRD_USER}
+        --password $ENV{FIREBIRD_PASSWORD}
+        --input ${TTMATH_QUERIES_JSON}
+        --output ${GENERATED_TTMATH_HEADER}
+    DEPENDS query_generator ${TTMATH_QUERIES_JSON}
+    COMMENT "Generating TTMath query header from ${TTMATH_QUERIES_JSON}"
+    VERBATIM
+)
+
+# Custom target to ensure header is generated
+add_custom_target(generate_ttmath_queries
+    DEPENDS ${GENERATED_TTMATH_HEADER}
+)
+
+# Test: query_generator with TTMath adapters (full E2E integration test)
+# This test verifies that:
+#   1. query_generator can generate code with TTMath adapters
+#   2. Generated code compiles correctly
+#   3. Generated code works with actual database operations
+add_executable(test_query_generator_ttmath
+    integration/test_query_generator_ttmath.cpp
+    test_base.cpp
+)
+
+# Make test depend on generated header
+add_dependencies(test_query_generator_ttmath generate_ttmath_queries)
+
+# Include directory for generated header
+target_include_directories(test_query_generator_ttmath PRIVATE ${CMAKE_BINARY_DIR})
+
+target_link_libraries(test_query_generator_ttmath PRIVATE
+    fbpp
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_query_generator_ttmath)
+
+# Test: Standalone compilation test for generated TTMath code
+# This is a quick smoke test that verifies the generated code compiles
+add_executable(test_generated_ttmath_compile
+    integration/test_generated_ttmath_compile.cpp
+)
+
+add_dependencies(test_generated_ttmath_compile generate_ttmath_queries)
+target_include_directories(test_generated_ttmath_compile PRIVATE ${CMAKE_BINARY_DIR})
+
+target_link_libraries(test_generated_ttmath_compile PRIVATE
+    fbpp
+    ${FIREBIRD_LIBRARIES}
+)

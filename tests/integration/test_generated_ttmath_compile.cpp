@@ -1,7 +1,8 @@
 // Simple compilation test for generated TTMath adapter code
 // This test just verifies that the generated code compiles correctly
 
-#include "/tmp/generated_queries_ttmath.hpp"
+// CMake adds CMAKE_BINARY_DIR to include path, so we can include directly
+#include "generated_queries_ttmath.hpp"
 
 #include "fbpp/adapters/ttmath_int128.hpp"
 #include "fbpp/adapters/ttmath_numeric.hpp"

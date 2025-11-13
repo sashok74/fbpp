@@ -5,7 +5,8 @@
 #include "../test_base.hpp"
 
 // Include the generated headers
-#include "/tmp/generated_queries_ttmath.hpp"
+// CMake adds CMAKE_BINARY_DIR to include path, so we can include directly
+#include "generated_queries_ttmath.hpp"
 
 #include "fbpp/core/connection.hpp"
 #include "fbpp/core/transaction.hpp"
