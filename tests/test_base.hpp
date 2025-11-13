@@ -151,6 +151,41 @@ protected:
         } catch (...) {
             // Table already exists, ignore
         }
+
+        // Create DATETIME_TEST for query_generator integration tests with std::chrono adapters
+        // This table is required during build time for query_generator to analyze field types
+        try {
+            conn->ExecuteDDL(
+                "CREATE TABLE DATETIME_TEST ("
+                "    F_ID INTEGER NOT NULL PRIMARY KEY,"
+                "    F_DATE DATE,"
+                "    F_DATE_NULLABLE DATE,"
+                "    F_TIME TIME,"
+                "    F_TIMESTAMP TIMESTAMP,"
+                "    F_TIMESTAMP_NULLABLE TIMESTAMP,"
+                "    F_NAME VARCHAR(100)"
+                ")");
+        } catch (...) {
+            // Table already exists, ignore
+        }
+
+        // Create COMBINED_TEST for query_generator integration tests with ALL adapters
+        // This table tests TTMath + CppDecimal + std::chrono adapters working together
+        try {
+            conn->ExecuteDDL(
+                "CREATE TABLE COMBINED_TEST ("
+                "    F_ID INTEGER NOT NULL PRIMARY KEY,"
+                "    F_INT128 INT128,"
+                "    F_NUMERIC38_2 NUMERIC(38, 2),"
+                "    F_DECFLOAT16 DECFLOAT(16),"
+                "    F_DECFLOAT34 DECFLOAT(34),"
+                "    F_DATE DATE,"
+                "    F_TIMESTAMP TIMESTAMP,"
+                "    F_NAME VARCHAR(100)"
+                ")");
+        } catch (...) {
+            // Table already exists, ignore
+        }
     }
 
     static void TearDownTestSuite() {

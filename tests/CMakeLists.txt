@@ -508,3 +508,132 @@ target_link_libraries(test_generated_decfloat_compile PRIVATE
     fbpp
     ${FIREBIRD_LIBRARIES}
 )
+
+# ============================================================================
+# std::chrono adapter integration tests (DATE/TIME types)
+# ============================================================================
+
+# Generated header paths for std::chrono test
+set(GENERATED_DATETIME_HEADER "${CMAKE_BINARY_DIR}/generated_queries_datetime.hpp")
+set(GENERATED_DATETIME_SUPPORT "${CMAKE_BINARY_DIR}/generated_queries_datetime_support.hpp")
+set(DATETIME_QUERIES_JSON "${CMAKE_SOURCE_DIR}/tests/test_data/query_generator_datetime_queries.json")
+
+# Custom command to generate header using query_generator with --use-chrono
+add_custom_command(
+    OUTPUT ${GENERATED_DATETIME_HEADER} ${GENERATED_DATETIME_SUPPORT}
+    COMMAND $<TARGET_FILE:query_generator>
+        --use-chrono
+        --dsn ${FIREBIRD_DSN}
+        --user ${FIREBIRD_USER}
+        --password ${FIREBIRD_PASSWORD}
+        --input ${DATETIME_QUERIES_JSON}
+        --output ${GENERATED_DATETIME_HEADER}
+        --support ${GENERATED_DATETIME_SUPPORT}
+    DEPENDS query_generator ${DATETIME_QUERIES_JSON}
+    COMMENT "Generating std::chrono query header from ${DATETIME_QUERIES_JSON}"
+    VERBATIM
+)
+
+# Custom target to ensure headers are generated
+add_custom_target(generate_datetime_queries
+    DEPENDS ${GENERATED_DATETIME_HEADER} ${GENERATED_DATETIME_SUPPORT}
+)
+
+# Test: query_generator with std::chrono adapters (full E2E integration test)
+# This test verifies that:
+#   1. query_generator can generate code with std::chrono adapters
+#   2. Generated code compiles correctly
+#   3. Generated code works with actual database operations
+add_executable(test_query_generator_datetime
+    integration/test_query_generator_datetime.cpp
+    test_base.cpp
+)
+
+# Make test depend on generated header
+add_dependencies(test_query_generator_datetime generate_datetime_queries)
+
+# Include directory for generated header
+target_include_directories(test_query_generator_datetime PRIVATE ${CMAKE_BINARY_DIR})
+
+target_link_libraries(test_query_generator_datetime PRIVATE
+    fbpp
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_query_generator_datetime)
+
+# Test: Standalone compilation test for generated std::chrono code
+# This is a quick smoke test that verifies the generated code compiles
+add_executable(test_generated_datetime_compile
+    integration/test_generated_datetime_compile.cpp
+)
+
+add_dependencies(test_generated_datetime_compile generate_datetime_queries)
+target_include_directories(test_generated_datetime_compile PRIVATE ${CMAKE_BINARY_DIR})
+
+target_link_libraries(test_generated_datetime_compile PRIVATE
+    fbpp
+    ${FIREBIRD_LIBRARIES}
+)
+
+# ============================================================================
+# Combined adapter integration tests (ALL adapters: TTMath + CppDecimal + std::chrono)
+# ============================================================================
+
+# Generated header paths for combined test
+set(GENERATED_COMBINED_HEADER "${CMAKE_BINARY_DIR}/generated_queries_combined.hpp")
+set(GENERATED_COMBINED_SUPPORT "${CMAKE_BINARY_DIR}/generated_queries_combined_support.hpp")
+set(COMBINED_QUERIES_JSON "${CMAKE_SOURCE_DIR}/tests/test_data/query_generator_combined_queries.json")
+
+# Custom command to generate header using query_generator with ALL adapters enabled
+add_custom_command(
+    OUTPUT ${GENERATED_COMBINED_HEADER} ${GENERATED_COMBINED_SUPPORT}
+    COMMAND $<TARGET_FILE:query_generator>
+        --use-ttmath-numeric
+        --use-ttmath-int128
+        --use-cppdecimal
+        --use-chrono
+        --dsn ${FIREBIRD_DSN}
+        --user ${FIREBIRD_USER}
+        --password ${FIREBIRD_PASSWORD}
+        --input ${COMBINED_QUERIES_JSON}
+        --output ${GENERATED_COMBINED_HEADER}
+        --support ${GENERATED_COMBINED_SUPPORT}
+    DEPENDS query_generator ${COMBINED_QUERIES_JSON}
+    COMMENT "Generating combined query header with ALL adapters from ${COMBINED_QUERIES_JSON}"
+    VERBATIM
+)
+
+# Custom target to ensure headers are generated
+add_custom_target(generate_combined_queries
+    DEPENDS ${GENERATED_COMBINED_HEADER} ${GENERATED_COMBINED_SUPPORT}
+)
+
+# Test: query_generator with ALL adapters (full E2E integration test)
+# This test verifies that:
+#   1. query_generator can generate code with all adapters enabled
+#   2. Generated code compiles correctly with mixed adapter types
+#   3. All adapters work together in one database operation
+add_executable(test_query_generator_combined
+    integration/test_query_generator_combined.cpp
+    test_base.cpp
+)
+
+# Make test depend on generated header
+add_dependencies(test_query_generator_combined generate_combined_queries)
+
+# Include directory for generated header
+target_include_directories(test_query_generator_combined PRIVATE ${CMAKE_BINARY_DIR})
+
+target_link_libraries(test_query_generator_combined PRIVATE
+    fbpp
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_query_generator_combined)
