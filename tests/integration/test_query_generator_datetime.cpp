@@ -9,18 +9,19 @@
  */
 
 #include <gtest/gtest.h>
+#include "../test_base.hpp"
 
-// Include generated header from query_generator
+// Include the generated headers
 // CMake adds CMAKE_BINARY_DIR to include path, so we can include directly
 #include "generated_queries_datetime.hpp"
 
-// Include std::chrono adapters
+#include "fbpp/core/connection.hpp"
+#include "fbpp/core/transaction.hpp"
+#include "fbpp/core/statement.hpp"
 #include "fbpp/adapters/chrono_datetime.hpp"
 
-// Include test base
-#include "../test_base.hpp"
-
-// Use generated namespace
+using namespace fbpp::core;
+using namespace fbpp::test;
 using namespace generated::queries;
 
 /**
