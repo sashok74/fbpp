@@ -79,11 +79,11 @@ protected:
 TEST_F(QueryGeneratorDecFloatTest, InsertAndSelectDecFloatTypes) {
     // Create prepared statements
     auto insertStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::InsertDecFloatTypes>::sql
+        std::string(QueryDescriptor<QueryId::InsertDecFloatTypes>::positionalSql)
     );
 
     auto selectStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::SelectDecFloatById>::sql
+        std::string(QueryDescriptor<QueryId::SelectDecFloatById>::positionalSql)
     );
 
     // 1. INSERT test data
@@ -147,15 +147,15 @@ TEST_F(QueryGeneratorDecFloatTest, InsertAndSelectDecFloatTypes) {
 TEST_F(QueryGeneratorDecFloatTest, UpdateDecFloat34) {
     // Create prepared statements
     auto insertStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::InsertDecFloatTypes>::sql
+        std::string(QueryDescriptor<QueryId::InsertDecFloatTypes>::positionalSql)
     );
 
     auto updateStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::UpdateDecFloat34>::sql
+        std::string(QueryDescriptor<QueryId::UpdateDecFloat34>::positionalSql)
     );
 
     auto selectStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::SelectDecFloatById>::sql
+        std::string(QueryDescriptor<QueryId::SelectDecFloatById>::positionalSql)
     );
 
     // 1. INSERT test data
@@ -216,11 +216,11 @@ TEST_F(QueryGeneratorDecFloatTest, UpdateDecFloat34) {
 TEST_F(QueryGeneratorDecFloatTest, SelectDecFloat34Greater) {
     // Create prepared statements
     auto insertStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::InsertDecFloatTypes>::sql
+        std::string(QueryDescriptor<QueryId::InsertDecFloatTypes>::positionalSql)
     );
 
     auto selectStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::SelectDecFloat34Greater>::sql
+        std::string(QueryDescriptor<QueryId::SelectDecFloat34Greater>::positionalSql)
     );
 
     // 1. INSERT test data - 3 rows with different DECFLOAT34 values
@@ -292,11 +292,11 @@ TEST_F(QueryGeneratorDecFloatTest, SelectDecFloat34Greater) {
 TEST_F(QueryGeneratorDecFloatTest, SelectAllDecFloat) {
     // Create prepared statements
     auto insertStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::InsertDecFloatTypes>::sql
+        std::string(QueryDescriptor<QueryId::InsertDecFloatTypes>::positionalSql)
     );
 
     auto selectStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::SelectAllDecFloat>::sql
+        std::string(QueryDescriptor<QueryId::SelectAllDecFloat>::positionalSql)
     );
 
     // 1. INSERT test data - 2 rows

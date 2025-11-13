@@ -83,11 +83,11 @@ protected:
 TEST_F(QueryGeneratorCombinedTest, InsertAndSelectAllAdapters) {
     // Create prepared statements
     auto insertStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::InsertAllTypes>::sql
+        std::string(QueryDescriptor<QueryId::InsertAllTypes>::positionalSql)
     );
 
     auto selectStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::SelectAllTypesById>::sql
+        std::string(QueryDescriptor<QueryId::SelectAllTypesById>::positionalSql)
     );
 
     // 1. INSERT test data with all adapter types
@@ -179,11 +179,11 @@ TEST_F(QueryGeneratorCombinedTest, InsertAndSelectAllAdapters) {
 TEST_F(QueryGeneratorCombinedTest, SelectAllCombined) {
     // Create prepared statements
     auto insertStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::InsertAllTypes>::sql
+        std::string(QueryDescriptor<QueryId::InsertAllTypes>::positionalSql)
     );
 
     auto selectStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::SelectAllCombined>::sql
+        std::string(QueryDescriptor<QueryId::SelectAllCombined>::positionalSql)
     );
 
     // 1. INSERT test data - 2 rows with different values

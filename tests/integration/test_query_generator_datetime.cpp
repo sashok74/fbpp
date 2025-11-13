@@ -81,11 +81,11 @@ protected:
 TEST_F(QueryGeneratorDateTimeTest, InsertAndSelectDateTimeTypes) {
     // Create prepared statements
     auto insertStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::InsertDateTimeTypes>::sql
+        std::string(QueryDescriptor<QueryId::InsertDateTimeTypes>::positionalSql)
     );
 
     auto selectStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::SelectDateTimeById>::sql
+        std::string(QueryDescriptor<QueryId::SelectDateTimeById>::positionalSql)
     );
 
     // 1. INSERT test data
@@ -189,15 +189,15 @@ TEST_F(QueryGeneratorDateTimeTest, InsertAndSelectDateTimeTypes) {
 TEST_F(QueryGeneratorDateTimeTest, UpdateTimestamp) {
     // Create prepared statements
     auto insertStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::InsertDateTimeTypes>::sql
+        std::string(QueryDescriptor<QueryId::InsertDateTimeTypes>::positionalSql)
     );
 
     auto updateStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::UpdateTimestamp>::sql
+        std::string(QueryDescriptor<QueryId::UpdateTimestamp>::positionalSql)
     );
 
     auto selectStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::SelectDateTimeById>::sql
+        std::string(QueryDescriptor<QueryId::SelectDateTimeById>::positionalSql)
     );
 
     // 1. INSERT test data
@@ -268,11 +268,11 @@ TEST_F(QueryGeneratorDateTimeTest, UpdateTimestamp) {
 TEST_F(QueryGeneratorDateTimeTest, SelectDateGreater) {
     // Create prepared statements
     auto insertStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::InsertDateTimeTypes>::sql
+        std::string(QueryDescriptor<QueryId::InsertDateTimeTypes>::positionalSql)
     );
 
     auto selectStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::SelectDateGreater>::sql
+        std::string(QueryDescriptor<QueryId::SelectDateGreater>::positionalSql)
     );
 
     // 1. INSERT test data - 3 rows with different dates
@@ -362,11 +362,11 @@ TEST_F(QueryGeneratorDateTimeTest, SelectDateGreater) {
 TEST_F(QueryGeneratorDateTimeTest, SelectAllDateTime) {
     // Create prepared statements
     auto insertStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::InsertDateTimeTypes>::sql
+        std::string(QueryDescriptor<QueryId::InsertDateTimeTypes>::positionalSql)
     );
 
     auto selectStmt = connection_->prepareStatement(
-        QueryDescriptor<QueryId::SelectAllDateTime>::sql
+        std::string(QueryDescriptor<QueryId::SelectAllDateTime>::positionalSql)
     );
 
     // 1. INSERT test data - 2 rows
