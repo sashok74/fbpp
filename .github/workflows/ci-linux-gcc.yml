@@ -425,7 +425,7 @@ jobs:
           FIREBIRD_USER: SYSDBA
           FIREBIRD_PASSWORD: planomer
           FIREBIRD_DB_PATH: /tmp/fbpp_temp_test.fdb
-          FIREBIRD_PERSISTENT_DB_PATH: /tmp/fbpp_persistent_test.fdb
+          FIREBIRD_PERSISTENT_DB_PATH: /tmp/testdb.fdb
           FIREBIRD_CHARSET: UTF8
         run: |
           echo "========================================="

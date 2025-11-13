@@ -4,6 +4,7 @@
 #include "fbpp/core/struct_pack.hpp"
 #include "fbpp/adapters/ttmath_numeric.hpp"
 #include "fbpp/adapters/chrono_datetime.hpp"
+#include <fbpp_util/connection_helper.hpp>
 #include <nlohmann/json.hpp>
 
 #include <chrono>
@@ -61,34 +62,10 @@ struct ExtendedTypesOutput {
 };
 
 ConnectionParams loadConnectionParams() {
-    std::vector<std::string> candidatePaths = {
-        "../../config/test_config.json",
-        "../config/test_config.json",
-        "config/test_config.json",
-        "./test_config.json"
-    };
-
-    std::ifstream configStream;
-    for (const auto& path : candidatePaths) {
-        configStream.open(path);
-        if (configStream.is_open()) {
-            std::cout << "Configuration loaded from: " << path << '\n';
-            break;
-        }
-    }
-
-    if (!configStream.is_open()) {
-        throw std::runtime_error("Cannot locate test_config.json");
-    }
-
-    auto config = nlohmann::json::parse(configStream);
-    auto dbConfig = config["tests"]["persistent_db"];
-
-    ConnectionParams params;
-    params.database = dbConfig.value("server", "firebird5") + ":" + dbConfig.value("path", "testdb");
-    params.user = dbConfig.value("user", "SYSDBA");
-    params.password = dbConfig.value("password", "masterkey");
-    params.charset = dbConfig.value("charset", "UTF8");
+    auto params = fbpp::util::getConnectionParams("tests.persistent_db");
+    std::cout << "Configuration loaded successfully\n";
+    std::cout << "  Database: " << params.database << '\n';
+    std::cout << "  User: " << params.user << '\n';
     return params;
 }
 

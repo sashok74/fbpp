@@ -10,8 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Для сбора контекста  для классов, фунций, методов проекта исользуй mcp cpp-sitter
 - **NO STUBS OR PLACEHOLDERS** - Every extended type must be fully implemented and tested against live Firebird 5 server
 - **ALL extended types support** is mandatory: INT128, DECFLOAT(16/34), NUMERIC(38,x), TIMESTAMP/TIME WITH TIME ZONE
-- **Live server testing** - Remote Firebird 5 at `firebird5:3050` with credentials `SYSDBA`/`planomer`
-- **Test database**: `/mnt/test/fbpp_temp_test.fdb` (recreated per test)
+- **Live server testing** - Firebird 5 at `firebird5.home.lan:3050` with credentials `SYSDBA`/`planomer`
+- **Persistent database**: `testdb` (contains TABLE_TEST_1 with all Firebird types)
+- **Temporary database**: `/mnt/test/fbpp_temp_test.fdb` (recreated per test with unique suffix)
 - **Template-heavy design** - Minimize virtual functions, maximize compile-time optimizations
 - **Multiple data formats**: JSON, tuple, and strongly-typed objects for parameters and results
 - **Named parameters** - Full support for `:param_name` syntax in SQL queries
@@ -20,36 +21,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Environment Configuration
 
-**Local Development Setup** (IMPORTANT - run first):
+**Configuration Priority** (12-factor app methodology):
+```
+Environment Variables > config/test_config.json
+```
+
+**Local Development** (OPTIONAL - for custom settings):
 ```bash
-# Set up environment variables for local Firebird server
+# OPTIONAL: Override config defaults with environment variables
 source scripts/setup_local_env.sh
 
-# Now you can build and test
+# Build and test (reads config/test_config.json by default)
 ./build.sh RelWithDebInfo
 ```
+
+**Without ENV variables**, the project uses defaults from `config/test_config.json`:
+- Server: `firebird5.home.lan`
+- Persistent DB: `testdb`
+- Temp DB: `/mnt/test/fbpp_temp_test.fdb`
 
 **Environment Variables**:
 The project uses environment variables for database configuration, affecting both:
 - **Build time**: `query_generator` tool for code generation
-- **Test runtime**: Database connections in tests
+- **Test runtime**: Database connections in tests and examples
 
-| Variable | Default (Local) | CI/CD Value | Description |
+| Variable | Config Default | CI/CD Value | Description |
 |----------|----------------|-------------|-------------|
-| `FIREBIRD_HOST` | `192.168.7.248` | `localhost` | Firebird server hostname |
+| `FIREBIRD_HOST` | `firebird5.home.lan` | `localhost` | Firebird server hostname |
 | `FIREBIRD_PORT` | `3050` | `3050` | Firebird server port |
 | `FIREBIRD_USER` | `SYSDBA` | `SYSDBA` | Database user |
 | `FIREBIRD_PASSWORD` | `planomer` | `planomer` | Database password |
-| `FIREBIRD_PERSISTENT_DB_PATH` | `/mnt/test/binding_test.fdb` | `/tmp/testdb.fdb` | Persistent DB for query_generator |
+| `FIREBIRD_PERSISTENT_DB_PATH` | `testdb` | `/tmp/testdb.fdb` | Persistent DB (TABLE_TEST_1) |
 | `FIREBIRD_DB_PATH` | `/mnt/test/fbpp_temp_test.fdb` | `/tmp/fbpp_temp_test.fdb` | Temporary test database |
-
-**Alternative servers**:
-```bash
-# For firebird5 server (alternative local setup)
-export FIREBIRD_HOST=firebird5
-export FIREBIRD_PERSISTENT_DB_PATH=testdb
-./build.sh
-```
+| `FIREBIRD_CHARSET` | `UTF8` | `UTF8` | Character set |
 
 ### Building and Testing
 
@@ -100,15 +104,25 @@ gdb ./build/tests/unit/test_statement
 
 ### Database Requirements
 
-**For `query_generator` (build time)**:
-The persistent database specified in `FIREBIRD_PERSISTENT_DB_PATH` must exist and contain:
-- Table `TABLE_TEST_1` with columns: `ID`, `F_INTEGER`, `F_VARCHAR`, `F_BOOLEAN`
+**Two databases are used:**
 
-This database is used by the `query_generator` tool during CMake build to generate type-safe query wrappers.
+1. **Persistent Database** (`testdb`)
+   - **Location**: `firebird5.home.lan:testdb` (locally) or `localhost:/tmp/testdb.fdb` (CI/CD)
+   - **Purpose**:
+     - Used by `query_generator` during build for code generation
+     - Used by `PersistentDatabaseTest` and examples
+   - **Contents**: TABLE_TEST_1 with full schema of ALL Firebird 5 types
+   - **Lifecycle**: Created once, reused across tests
+   - **Configuration**: Via `FIREBIRD_PERSISTENT_DB_PATH` or `config/test_config.json["tests"]["persistent_db"]`
 
-**For tests (runtime)**:
-- Tests automatically create and manage their own databases
-- No manual setup required - tests use `FIREBIRD_DB_PATH` and `FIREBIRD_PERSISTENT_DB_PATH`
+2. **Temporary Database** (`fbpp_temp_test.fdb`)
+   - **Location**: `/mnt/test/fbpp_temp_test_{PID}_{N}.fdb` (locally) or `/tmp/fbpp_temp_test_{PID}_{N}.fdb` (CI/CD)
+   - **Purpose**: Used by `TempDatabaseTest` for isolated tests
+   - **Contents**: Schema created per test via `createTestSchema()`
+   - **Lifecycle**: Created and dropped for EACH test
+   - **Configuration**: Via `FIREBIRD_DB_PATH` or `config/test_config.json["tests"]["temp_db"]`
+
+**No manual database setup required** - tests automatically create databases if they don't exist.
 
 ### Examples
 ```bash
@@ -160,6 +174,12 @@ This database is used by the `query_generator` tool during CMake build to genera
 - **tuple_unpacker.hpp** - Firebird message buffer → std::tuple
 - **type_adapter.hpp** - Type adapter trait system
 - **exception.hpp** - FirebirdException class
+
+### Utility Headers (include/fbpp_util/)
+
+- **connection_helper.hpp** - Config loading and connection params with ENV override (12-factor app)
+- **config.h** - Configuration structures
+- **config_loader.h** - JSON configuration file loader
 
 ### Type System Mapping
 
@@ -231,25 +251,45 @@ Configuration file: `config/test_config.json`
 ```json
 {
   "db": {
-    "server": "firebird5",
-    "path": "/mnt/test/binding_test.fdb",
+    "server": "firebird5.home.lan",
+    "path": "testdb",
     "user": "SYSDBA",
     "password": "planomer",
     "charset": "UTF8"
   },
   "tests": {
+    "persistent_db": {
+      "server": "firebird5.home.lan",
+      "path": "testdb",
+      "user": "SYSDBA",
+      "password": "planomer",
+      "charset": "UTF8",
+      "create_once": true
+    },
     "temp_db": {
+      "server": "firebird5.home.lan",
       "path": "/mnt/test/fbpp_temp_test.fdb",
-      "server": "firebird5",
+      "user": "SYSDBA",
+      "password": "planomer",
+      "charset": "UTF8",
       "recreate_each_test": true
     }
   }
 }
 ```
 
-- **Server**: firebird5:3050 (remote)
+**Configuration mechanism:**
+- **Default values**: Defined in `config/test_config.json`
+- **Environment overrides**: ENV variables have priority (12-factor app)
+- **Helper utility**: `fbpp::util::getConnectionParams(section)` handles config loading + ENV overrides
+  - Examples use section `"db"`
+  - Tests use sections `"tests.persistent_db"` or `"tests.temp_db"`
+
+**Server configuration:**
+- **Server**: firebird5.home.lan:3050 (local development)
 - **Credentials**: SYSDBA / planomer
 - **Character Set**: UTF8
+- **Persistent DB**: testdb (contains TABLE_TEST_1)
 - **Firebird API**: /opt/firebird/include/firebird/Interface.h
 - **Client Library**: libfbclient.so
 
