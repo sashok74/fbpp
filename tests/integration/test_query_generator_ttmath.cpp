@@ -104,31 +104,32 @@ TEST_F(QueryGeneratorTTMathTest, InsertAndSelectTTMathTypes) {
     SelectTTMathByIdIn selectInput;
     selectInput.param1 = 1;
 
-    auto resultSet = selectStmt->executeQuery(*selectTxn, selectInput);
+    auto resultSet = selectTxn->openCursor(selectStmt, selectInput);
+    ASSERT_TRUE(resultSet) << "Failed to open cursor";
 
     // Fetch and verify
-    auto output = resultSet->fetchOne<SelectTTMathByIdOut>();
-    ASSERT_TRUE(output.has_value());
+    SelectTTMathByIdOut output{};
+    ASSERT_TRUE(resultSet->fetch(output));
 
     // Verify INT128 values
-    EXPECT_EQ(output->fInt128Pure.toString(), "123456789012345678901234567890");
-    ASSERT_TRUE(output->fInt128Nullable.has_value());
-    EXPECT_EQ(output->fInt128Nullable->toString(), "987654321098765432109876543210");
+    EXPECT_EQ(output.fInt128Pure.toString(), "123456789012345678901234567890");
+    ASSERT_TRUE(output.fInt128Nullable.has_value());
+    EXPECT_EQ(output.fInt128Nullable->toString(), "987654321098765432109876543210");
 
     // Verify NUMERIC38 values
-    EXPECT_EQ(output->fNumeric382.toString(), "12345678901234567890.12");
-    ASSERT_TRUE(output->fNumeric384.has_value());
-    EXPECT_EQ(output->fNumeric384->toString(), "1234567890123456.1234");
-    EXPECT_EQ(output->fNumeric388.toString(), "123456789012.12345678");
+    EXPECT_EQ(output.fNumeric382.toString(), "12345678901234567890.12");
+    ASSERT_TRUE(output.fNumeric384.has_value());
+    EXPECT_EQ(output.fNumeric384->toString(), "1234567890123456.1234");
+    EXPECT_EQ(output.fNumeric388.toString(), "123456789012.12345678");
 
     // Verify NUMERIC18 values
-    EXPECT_EQ(output->fNumeric182.toString(), "1234567890123456.12");
-    ASSERT_TRUE(output->fNumeric186.has_value());
-    EXPECT_EQ(output->fNumeric186->toString(), "123456789012.123456");
+    EXPECT_EQ(output.fNumeric182.toString(), "1234567890123456.12");
+    ASSERT_TRUE(output.fNumeric186.has_value());
+    EXPECT_EQ(output.fNumeric186->toString(), "123456789012.123456");
 
     // Verify name
-    ASSERT_TRUE(output->fName.has_value());
-    EXPECT_EQ(*output->fName, "Test TTMath");
+    ASSERT_TRUE(output.fName.has_value());
+    EXPECT_EQ(*output.fName, "Test TTMath");
 
     selectTxn->Commit();
 }
@@ -155,11 +156,13 @@ TEST_F(QueryGeneratorTTMathTest, UpdateNumericTypes) {
         "SELECT F_NUMERIC38_2, F_NUMERIC38_8 FROM TTMATH_TEST WHERE F_ID = ?"
     );
 
-    auto resultSet = selectStmt->executeQuery(*selectTxn, std::make_tuple(1));
-    auto result = resultSet->fetchOne<fbpp::adapters::TTNumeric<2, -2>, fbpp::adapters::TTNumeric<2, -8>>();
+    auto resultSet = selectTxn->openCursor(selectStmt, std::make_tuple(1));
+    ASSERT_TRUE(resultSet) << "Failed to open cursor";
 
-    ASSERT_TRUE(result.has_value());
-    auto [numeric38_2, numeric38_8] = *result;
+    std::tuple<fbpp::adapters::TTNumeric<2, -2>, fbpp::adapters::TTNumeric<2, -8>> result;
+    ASSERT_TRUE(resultSet->fetch(result));
+
+    auto [numeric38_2, numeric38_8] = result;
 
     EXPECT_EQ(numeric38_2.toString(), "99999999999999999999.99");
     EXPECT_EQ(numeric38_8.toString(), "999999999999.99999999");
@@ -177,16 +180,17 @@ TEST_F(QueryGeneratorTTMathTest, SelectScaledTypesWithFilter) {
     SelectScaledTypesIn input;
     input.param1 = fbpp::adapters::TTNumeric<2, -2>("0.00");  // Filter: F_NUMERIC38_2 > 0
 
-    auto resultSet = stmt->executeQuery(*txn, input);
+    auto resultSet = txn->openCursor(stmt, input);
+    ASSERT_TRUE(resultSet) << "Failed to open cursor";
 
     // Should return the row we inserted
-    auto output = resultSet->fetchOne<SelectScaledTypesOut>();
-    ASSERT_TRUE(output.has_value());
+    SelectScaledTypesOut output{};
+    ASSERT_TRUE(resultSet->fetch(output));
 
     // Verify scaled numeric types are present
-    EXPECT_FALSE(output->fNumeric382.toString().empty());
-    EXPECT_FALSE(output->fNumeric388.toString().empty());
-    EXPECT_FALSE(output->fNumeric182.toString().empty());
+    EXPECT_FALSE(output.fNumeric382.toString().empty());
+    EXPECT_FALSE(output.fNumeric388.toString().empty());
+    EXPECT_FALSE(output.fNumeric182.toString().empty());
 
     txn->Commit();
 }
@@ -200,21 +204,23 @@ TEST_F(QueryGeneratorTTMathTest, SelectAllTTMath) {
 
     SelectAllTTMathIn input;  // No parameters
 
-    auto resultSet = stmt->executeQuery(*txn, input);
+    auto resultSet = txn->openCursor(stmt, input);
+    ASSERT_TRUE(resultSet) << "Failed to open cursor";
 
     // Fetch all rows
     int rowCount = 0;
-    while (auto row = resultSet->fetchOne<SelectAllTTMathOut>()) {
+    SelectAllTTMathOut row{};
+    while (resultSet->fetch(row)) {
         rowCount++;
 
         // Verify structure
-        EXPECT_GT(row->fId, 0);
-        EXPECT_FALSE(row->fInt128Pure.toString().empty());
+        EXPECT_GT(row.fId, 0);
+        EXPECT_FALSE(row.fInt128Pure.toString().empty());
 
         // All rows should have these required fields
-        EXPECT_FALSE(row->fNumeric382.toString().empty());
-        EXPECT_FALSE(row->fNumeric388.toString().empty());
-        EXPECT_FALSE(row->fNumeric182.toString().empty());
+        EXPECT_FALSE(row.fNumeric382.toString().empty());
+        EXPECT_FALSE(row.fNumeric388.toString().empty());
+        EXPECT_FALSE(row.fNumeric182.toString().empty());
     }
 
     EXPECT_GT(rowCount, 0) << "Should have at least one row";
