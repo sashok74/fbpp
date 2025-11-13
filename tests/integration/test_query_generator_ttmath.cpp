@@ -294,9 +294,8 @@ TEST_F(QueryGeneratorTTMathTest, SelectAllTTMath) {
         std::string(QueryDescriptor<QueryId::SelectAllTTMath>::positionalSql)
     );
 
-    SelectAllTTMathIn input;  // No parameters
-
-    auto resultSet = txn->openCursor(stmt, input);
+    // SelectAllTTMath has no parameters, so call openCursor without arguments
+    auto resultSet = txn->openCursor(stmt);
     ASSERT_TRUE(resultSet) << "Failed to open cursor";
 
     // Fetch all rows
