@@ -28,12 +28,50 @@ struct Options {
     std::filesystem::path inputPath;
     std::filesystem::path outputHeader;
     std::filesystem::path supportHeader;
+
+    // Adapter configuration
+    bool useTTMathNumeric = false;
+    bool useTTMathInt128 = false;
+    bool useChronoDatetime = false;
+    bool useCppDecimalDecFloat = false;
+    bool generateAliases = true;
 };
 
 void printUsage() {
-    std::cout << "Usage: query_generator --dsn <dsn> [--user name] [--password pass] "
-                 "[--charset utf8] --input <queries.json> --output <queries.hpp> "
-                 "--support <queries.structs.hpp>\n";
+    std::cout << R"(Usage: query_generator [options]
+
+Required arguments:
+  --dsn <path>              Database path (e.g., firebird5:/path/to/db.fdb)
+  --input <file.json>       Input JSON file with queries
+  --output <file.hpp>       Output header file with query wrappers
+  --support <file.hpp>      Output support header with struct definitions
+
+Optional arguments:
+  --user <name>             Database user (default: SYSDBA)
+  --password <pass>         Database password (default: planomer)
+  --charset <charset>       Character set (default: UTF8)
+
+Adapter options:
+  --use-ttmath-numeric      Use TTMath for NUMERIC(38,x) types
+  --use-ttmath-int128       Use TTMath for INT128 types
+  --use-chrono              Use std::chrono for DATE/TIME/TIMESTAMP types
+  --use-cppdecimal          Use CppDecimal for DECFLOAT types
+  --no-aliases              Do not generate type aliases (using declarations)
+
+Examples:
+  # Generate with core types only (default)
+  query_generator --dsn firebird5:/db.fdb --input queries.json --output queries.hpp --support queries.structs.hpp
+
+  # Generate with TTMath adapters
+  query_generator --dsn firebird5:/db.fdb --input queries.json --output queries.hpp --support queries.structs.hpp \
+    --use-ttmath-numeric --use-ttmath-int128
+
+  # Generate with all adapters
+  query_generator --dsn firebird5:/db.fdb --input queries.json --output queries.hpp --support queries.structs.hpp \
+    --use-ttmath-numeric --use-ttmath-int128 --use-chrono --use-cppdecimal
+
+For more information, see doc/QUERY_GENERATOR_USER_GUIDE.md
+)";
 }
 
 std::optional<Options> parseOptions(int argc, char** argv) {
@@ -61,6 +99,16 @@ std::optional<Options> parseOptions(int argc, char** argv) {
             opts.outputHeader = next();
         } else if (arg == "--support") {
             opts.supportHeader = next();
+        } else if (arg == "--use-ttmath-numeric") {
+            opts.useTTMathNumeric = true;
+        } else if (arg == "--use-ttmath-int128") {
+            opts.useTTMathInt128 = true;
+        } else if (arg == "--use-chrono") {
+            opts.useChronoDatetime = true;
+        } else if (arg == "--use-cppdecimal") {
+            opts.useCppDecimalDecFloat = true;
+        } else if (arg == "--no-aliases") {
+            opts.generateAliases = false;
         } else if (arg == "--help" || arg == "-h") {
             printUsage();
             return std::nullopt;
@@ -134,11 +182,19 @@ int main(int argc, char** argv) {
             });
         }
 
-        const auto specs = service.buildQuerySpecs(definitions);
+        // Create adapter configuration from command-line options
+        fbpp::core::AdapterConfig config;
+        config.useTTMathNumeric = opts.useTTMathNumeric;
+        config.useTTMathInt128 = opts.useTTMathInt128;
+        config.useChronoDatetime = opts.useChronoDatetime;
+        config.useCppDecimalDecFloat = opts.useCppDecimalDecFloat;
+        config.generateAliases = opts.generateAliases;
+
+        const auto specs = service.buildQuerySpecs(definitions, config);
         const auto supportHeaderName = opts.supportHeader.filename().string();
 
-        const auto mainHeader = renderQueryGeneratorMainHeader(specs, supportHeaderName);
-        const auto supportHeader = renderQueryGeneratorSupportHeader(specs);
+        const auto mainHeader = renderQueryGeneratorMainHeader(specs, supportHeaderName, config);
+        const auto supportHeader = renderQueryGeneratorSupportHeader(specs, config);
 
         writeToFile(opts.outputHeader, mainHeader);
         writeToFile(opts.supportHeader, supportHeader);

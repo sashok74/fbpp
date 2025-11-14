@@ -20,6 +20,14 @@ rm -rf CMakeUserPresets.json
 echo "→ Installing Conan dependencies..."
 conan install . --output-folder=build --build=missing -s build_type="${BTYPE}"
 
+# Prepare Firebird test database (shared with CI workflow)
+if [[ "${SKIP_DB_PREP:-0}" != "1" ]]; then
+  echo "→ Preparing Firebird test database..."
+  ./scripts/prepare_test_db.sh
+else
+  echo "→ Skipping test database preparation (SKIP_DB_PREP=1)"
+fi
+
 # The toolchain file location depends on conan version
 TOOLCHAIN_FILE="build/build/${BTYPE}/generators/conan_toolchain.cmake"
 if [ ! -f "${TOOLCHAIN_FILE}" ]; then
