@@ -18,7 +18,7 @@ BEGIN
                 F_DOUBLE_PRECISION  DOUBLE PRECISION,
                 F_FLOAT             FLOAT,
                 F_INT128            INT128,
-                F_INTEGER           INTEGER UNIQUE,
+                F_INTEGER           INTEGER,
                 F_NUMERIC           NUMERIC(16,6),
                 F_SMALINT           SMALLINT,
                 F_TIME              TIME,
@@ -26,13 +26,12 @@ BEGIN
                 F_TIMESHTAMP        TIMESTAMP,
                 F_TIMESHTAMP_TZ     TIMESTAMP WITH TIME ZONE,
                 F_VARCHAR           VARCHAR(64),
-                F_BLOB_B            BLOB SUB_TYPE BINARY,
-                F_BLOB_T            BLOB SUB_TYPE TEXT,
+                F_BLOB_B            BLOB SUB_TYPE BINARY SEGMENT SIZE 1024,
+                F_BLOB_T            BLOB SUB_TYPE TEXT SEGMENT SIZE 1024,
                 F_NULL              INTEGER
-            )
-        ';
-        EXECUTE STATEMENT 'ALTER TABLE TABLE_TEST_1 ADD CONSTRAINT UNQ1_TABLE_TEST_F_INTEGER UNIQUE (F_INTEGER)';
-        EXECUTE STATEMENT 'ALTER TABLE TABLE_TEST_1 ADD CONSTRAINT PK_TABLE_TEST_1 PRIMARY KEY (ID)';
+            ); ';
+        EXECUTE STATEMENT 'ALTER TABLE TABLE_TEST_1 ADD CONSTRAINT UNQ1_TABLE_TEST_F_INTEGER UNIQUE (F_INTEGER);';
+        EXECUTE STATEMENT 'ALTER TABLE TABLE_TEST_1 ADD CONSTRAINT PK_TABLE_TEST_1 PRIMARY KEY (ID);';
     END
 END^
 
