@@ -1,5 +1,4 @@
--- Unified schema for persistent databases used by fbpp tests and query_generator.
--- Ensures required tables exist; existing schemas remain untouched.
+-- необходимый набор таблиц для тестирования.
 
 SET TERM ^ ;
 
