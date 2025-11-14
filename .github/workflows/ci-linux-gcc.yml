@@ -140,8 +140,17 @@ jobs:
           # Install message file so client tools can format errors
           echo ""
           echo "→ Installing Firebird message file..."
-          sudo cp -v opt/firebird/lib/firebird.msg /usr/lib/firebird.msg
-          echo "FIREBIRD_MSG_PATH=/usr/lib" >> $GITHUB_ENV
+          sudo install -d /usr/lib/firebird
+          if [[ -f "opt/firebird/lib/firebird.msg" ]]; then
+            FIREBIRD_MSG_SOURCE="opt/firebird/lib/firebird.msg"
+          elif [[ -f "opt/firebird/firebird.msg" ]]; then
+            FIREBIRD_MSG_SOURCE="opt/firebird/firebird.msg"
+          else
+            echo "✗ Firebird message file not found in extracted archive" >&2
+            exit 1
+          fi
+          sudo cp -v "$FIREBIRD_MSG_SOURCE" /usr/lib/firebird/firebird.msg
+          echo "FIREBIRD_MSG_PATH=/usr/lib/firebird" >> $GITHUB_ENV
 
           # Copy isql utility for database creation
           echo ""
