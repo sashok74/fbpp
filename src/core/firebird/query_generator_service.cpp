@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <format>
 #include <set>
 #include <sstream>
@@ -88,7 +89,7 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput, const AdapterCon
                     result.needsTTMath = true;
                     result.scaledInfo = TypeMapping::ScaledNumericInfo{
                         .intWords = 1,
-                        .scale = field.scale
+                        .scale = static_cast<std::int16_t>(field.scale)
                     };
                 } else {
                     result.cppType = "std::int32_t";
@@ -105,7 +106,7 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput, const AdapterCon
                     result.needsTTMath = true;
                     result.scaledInfo = TypeMapping::ScaledNumericInfo{
                         .intWords = 1,
-                        .scale = field.scale
+                        .scale = static_cast<std::int16_t>(field.scale)
                     };
                 } else {
                     result.cppType = "std::int64_t";
@@ -136,7 +137,7 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput, const AdapterCon
                     result.needsTTMath = true;
                     result.scaledInfo = TypeMapping::ScaledNumericInfo{
                         .intWords = 2,
-                        .scale = field.scale
+                        .scale = static_cast<std::int16_t>(field.scale)
                     };
                 } else {
                     result.cppType = "fbpp::core::Int128";
