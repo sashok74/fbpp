@@ -137,6 +137,12 @@ jobs:
           echo "→ Installing Firebird libraries..."
           sudo cp -v opt/firebird/lib/*.so* /usr/lib/x86_64-linux-gnu/
 
+          # Install message file so client tools can format errors
+          echo ""
+          echo "→ Installing Firebird message file..."
+          sudo cp -v opt/firebird/lib/firebird.msg /usr/lib/firebird.msg
+          echo "FIREBIRD_MSG_PATH=/usr/lib" >> $GITHUB_ENV
+
           # Copy isql utility for database creation
           echo ""
           echo "→ Installing Firebird isql utility..."

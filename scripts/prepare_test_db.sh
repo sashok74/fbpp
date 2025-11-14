@@ -76,6 +76,14 @@ if [[ -z "${ISQL_BIN}" ]]; then
     fi
 fi
 
+if [[ -z "${FIREBIRD_MSG_PATH:-}" ]]; then
+    if [[ -f "/opt/firebird/lib/firebird.msg" ]]; then
+        export FIREBIRD_MSG_PATH="/opt/firebird/lib"
+    elif [[ -f "/usr/lib/firebird.msg" ]]; then
+        export FIREBIRD_MSG_PATH="/usr/lib"
+    fi
+fi
+
 if [[ -n "${PORT}" ]]; then
     DSN="${HOST}/${PORT}:${DB_PATH}"
 else
