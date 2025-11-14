@@ -150,6 +150,8 @@ jobs:
             exit 1
           fi
           sudo cp -v "$FIREBIRD_MSG_SOURCE" /usr/lib/firebird/firebird.msg
+          # Also place copy at legacy default path for tools that expect it
+          sudo cp -v "$FIREBIRD_MSG_SOURCE" /usr/lib/firebird.msg
           echo "FIREBIRD_MSG_PATH=/usr/lib/firebird" >> $GITHUB_ENV
 
           # Copy isql utility for database creation
