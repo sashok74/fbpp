@@ -215,11 +215,19 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput, const AdapterCon
             break;
         case SQL_BLOB:
             if (field.subType == 1) {
-                result.cppType = "fbpp::core::TextBlob";
+                // Text BLOB (SUB_TYPE 1)
+                if (config.useStringForTextBlob) {
+                    result.cppType = "std::string";
+                    result.needsString = true;
+                } else {
+                    result.cppType = "fbpp::core::TextBlob";
+                    result.needsExtendedTypes = true;
+                }
             } else {
+                // Binary BLOB
                 result.cppType = "fbpp::core::Blob";
+                result.needsExtendedTypes = true;
             }
-            result.needsExtendedTypes = true;
             break;
         case SQL_ARRAY:
         default:

@@ -34,6 +34,7 @@ struct Options {
     bool useTTMathInt128 = false;
     bool useChronoDatetime = false;
     bool useCppDecimalDecFloat = false;
+    bool useStringForTextBlob = false;
     bool generateAliases = true;
 };
 
@@ -56,6 +57,7 @@ Adapter options:
   --use-ttmath-int128       Use TTMath for INT128 types
   --use-chrono              Use std::chrono for DATE/TIME/TIMESTAMP types
   --use-cppdecimal          Use CppDecimal for DECFLOAT types
+  --use-string-blob         Use std::string for text BLOB (SUB_TYPE 1)
   --no-aliases              Do not generate type aliases (using declarations)
 
 Examples:
@@ -107,6 +109,8 @@ std::optional<Options> parseOptions(int argc, char** argv) {
             opts.useChronoDatetime = true;
         } else if (arg == "--use-cppdecimal") {
             opts.useCppDecimalDecFloat = true;
+        } else if (arg == "--use-string-blob") {
+            opts.useStringForTextBlob = true;
         } else if (arg == "--no-aliases") {
             opts.generateAliases = false;
         } else if (arg == "--help" || arg == "-h") {
@@ -188,6 +192,7 @@ int main(int argc, char** argv) {
         config.useTTMathInt128 = opts.useTTMathInt128;
         config.useChronoDatetime = opts.useChronoDatetime;
         config.useCppDecimalDecFloat = opts.useCppDecimalDecFloat;
+        config.useStringForTextBlob = opts.useStringForTextBlob;
         config.generateAliases = opts.generateAliases;
 
         const auto specs = service.buildQuerySpecs(definitions, config);

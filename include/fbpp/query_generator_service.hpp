@@ -15,6 +15,7 @@ struct AdapterConfig {
     bool useTTMathInt128 = false;
     bool useChronoDatetime = false;
     bool useCppDecimalDecFloat = false;
+    bool useStringForTextBlob = false;
     bool generateAliases = true;
 };
 
