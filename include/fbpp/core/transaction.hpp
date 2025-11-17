@@ -4,6 +4,7 @@
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/firebird_compat.hpp"
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace fbpp {

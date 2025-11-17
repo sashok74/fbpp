@@ -122,3 +122,7 @@ private:
 
 } // namespace core
 } // namespace fbpp
+
+// Include template implementations for Transaction methods
+// This must be at the very end after Transaction, Statement, and Connection are all fully defined
+#include "fbpp/core/transaction_templates.hpp"
