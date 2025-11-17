@@ -450,13 +450,12 @@ int main() {
         std::cout << "Inserting row id=" << insertRow.id << " with label '" << insertRow.fVarchar << "'\n";
 
         auto insertTra = connection->StartTransaction();
-        executeNonQuery<local::QueryDescriptor<local::QueryId::InsertExtended>>(
-            *connection, *insertTra, insertRow);
+        insertTra->executeNonQuery<local::QueryDescriptor<local::QueryId::InsertExtended>>(insertRow);
         insertTra->Commit();
 
         auto fetchTra = connection->StartTransaction();
-        auto rows = executeQuery<local::QueryDescriptor<local::QueryId::FetchExtended>>(
-            *connection, *fetchTra, ExtendedTypesFetchInput{newId});
+        auto rows = fetchTra->executeQuery<local::QueryDescriptor<local::QueryId::FetchExtended>>(
+            ExtendedTypesFetchInput{newId});
         fetchTra->Commit();
 
         if (rows.empty()) {

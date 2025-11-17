@@ -104,8 +104,8 @@ TEST_F(QueryGeneratorIntegrationTest, TableTest1CrudWorkflow) {
         assignField(selectParams.param2, initialLabel);
 
         auto selectedRows = runOrFail([&] {
-            return executeQuery<QueryDescriptor<QueryId::TABLE_TEST_1_S>>(
-                *connection_, *transaction, selectParams);
+            return transaction->executeQuery<QueryDescriptor<QueryId::TABLE_TEST_1_S>>(
+                selectParams);
         });
         ASSERT_EQ(selectedRows.size(), 1);
 
@@ -132,8 +132,8 @@ TEST_F(QueryGeneratorIntegrationTest, TableTest1CrudWorkflow) {
         assignField(selectParams.param1, testInteger);
         assignField(selectParams.param2, updatedLabel);
         auto updatedRows = runOrFail([&] {
-            return executeQuery<QueryDescriptor<QueryId::TABLE_TEST_1_S>>(
-                *connection_, *transaction, selectParams);
+            return transaction->executeQuery<QueryDescriptor<QueryId::TABLE_TEST_1_S>>(
+                selectParams);
         });
         ASSERT_EQ(updatedRows.size(), 1);
         const auto& updatedRow = updatedRows.front();
@@ -158,8 +158,8 @@ TEST_F(QueryGeneratorIntegrationTest, TableTest1CrudWorkflow) {
         assignField(selectParams.param1, testInteger);
         assignField(selectParams.param2, updatedLabel);
         auto afterDeleteRows = runOrFail([&] {
-            return executeQuery<QueryDescriptor<QueryId::TABLE_TEST_1_S>>(
-                *connection_, *transaction, selectParams);
+            return transaction->executeQuery<QueryDescriptor<QueryId::TABLE_TEST_1_S>>(
+                selectParams);
         });
         EXPECT_TRUE(afterDeleteRows.empty());
 

@@ -215,8 +215,8 @@ TEST_F(StructPackTest, PackAndUnpackStructAgainstTableTest1) {
 
     // Execute SELECT via QueryDescriptor helper
     auto selectTra = connection_->StartTransaction();
-    auto rows = fbpp::core::executeQuery<local::QueryDescriptor<local::QueryId::SelectById>>(
-        *connection_, *selectTra, TableTestSelectInput{targetId});
+    auto rows = selectTra->executeQuery<local::QueryDescriptor<local::QueryId::SelectById>>(
+        TableTestSelectInput{targetId});
     ASSERT_EQ(rows.size(), 1u);
     EXPECT_EQ(rows[0].id, targetId);
     auto originalName = rows[0].fVarchar;
@@ -224,30 +224,30 @@ TEST_F(StructPackTest, PackAndUnpackStructAgainstTableTest1) {
 
     // Fetch single row
     auto fetchTra2 = connection_->StartTransaction();
-    auto oneRow = fbpp::core::fetchOne<local::QueryDescriptor<local::QueryId::SelectById>>(
-        *connection_, *fetchTra2, TableTestSelectInput{targetId});
+    auto oneRow = fetchTra2->fetchOne<local::QueryDescriptor<local::QueryId::SelectById>>(
+        TableTestSelectInput{targetId});
     ASSERT_TRUE(oneRow.has_value());
     fetchTra2->Commit();
 
     // Update value and verify non-query execution
     auto updateTra = connection_->StartTransaction();
     local::TableTestUpdateInput updateParams{"UpdatedName", targetId};
-    auto affected = fbpp::core::executeNonQuery<local::QueryDescriptor<local::QueryId::UpdateName>>(
-        *connection_, *updateTra, updateParams);
+    auto affected = updateTra->executeNonQuery<local::QueryDescriptor<local::QueryId::UpdateName>>(
+        updateParams);
     EXPECT_EQ(affected, 1u);
     updateTra->Commit();
 
     auto verifyTra = connection_->StartTransaction();
-    auto updatedRow = fbpp::core::fetchOne<local::QueryDescriptor<local::QueryId::SelectById>>(
-        *connection_, *verifyTra, TableTestSelectInput{targetId});
+    auto updatedRow = verifyTra->fetchOne<local::QueryDescriptor<local::QueryId::SelectById>>(
+        TableTestSelectInput{targetId});
     ASSERT_TRUE(updatedRow.has_value());
     EXPECT_EQ(updatedRow->fVarchar, "UpdatedName");
     verifyTra->Commit();
 
     auto restoreTra = connection_->StartTransaction();
     local::TableTestUpdateInput restoreParams{originalName, targetId};
-    fbpp::core::executeNonQuery<local::QueryDescriptor<local::QueryId::UpdateName>>(
-        *connection_, *restoreTra, restoreParams);
+    restoreTra->executeNonQuery<local::QueryDescriptor<local::QueryId::UpdateName>>(
+        restoreParams);
     restoreTra->Commit();
 }
 
