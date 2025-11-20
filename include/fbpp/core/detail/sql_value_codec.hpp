@@ -7,6 +7,7 @@
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/firebird_compat.hpp"
 #include "fbpp_util/trace.h"
+#include "fbpp/core/detail/conversion_utils.hpp"
 
 #include <algorithm>
 #include <array>

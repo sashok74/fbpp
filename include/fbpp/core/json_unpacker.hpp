@@ -9,35 +9,10 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include "fbpp/core/detail/conversion_utils.hpp"
 
 namespace fbpp::core {
-
-// Forward declaration
-class Transaction;
-
 namespace detail {
-
-inline std::string decimal_to_string_i64(int64_t v, int scaleNeg /* <0 */) {
-    const uint32_t s = static_cast<uint32_t>(-scaleNeg); // число знаков после точки
-    bool neg = v < 0;
-    uint64_t u = neg ? uint64_t(-(v + 1)) + 1 : uint64_t(v); // модуль без UB
-
-    static const uint64_t POW10[19] = {1ull,10ull,100ull,1000ull,10000ull,100000ull,1000000ull,10000000ull,100000000ull,1000000000ull,
-        10000000000ull,100000000000ull,1000000000000ull,10000000000000ull,100000000000000ull,1000000000000000ull,10000000000000000ull,
-        100000000000000000ull,1000000000000000000ull};
-
-    if (s >= 19) throw FirebirdException("Scale too large");
-    uint64_t p = POW10[s];
-    uint64_t hi = u / p, lo = u % p;
-
-    char frac[32];
-    std::snprintf(frac, sizeof frac, "%0*llu", int(s), (unsigned long long)lo);
-
-    std::string out = std::to_string(hi);
-    if (s) { out.push_back('.'); out += frac; }
-    if (neg) out.insert(out.begin(), '-');
-    return out;
-}
 
 // Helper to unpack a single value from buffer to JSON
 inline void unpackValueToJson(nlohmann::json& jsonValue, const uint8_t* data_ptr, const int16_t* null_ptr,
