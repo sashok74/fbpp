@@ -639,3 +639,19 @@ target_link_libraries(test_query_generator_combined PRIVATE
 )
 
 gtest_discover_tests(test_query_generator_combined)
+
+# Extended types conversion test
+add_executable(test_extended_types_conversion
+    unit/test_extended_types_conversion.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_extended_types_conversion PRIVATE
+    fbpp
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_extended_types_conversion)
