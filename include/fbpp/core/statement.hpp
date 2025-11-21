@@ -518,7 +518,3 @@ std::unique_ptr<ResultSet> Statement::openCursor(std::shared_ptr<Transaction> tr
 
 } // namespace core
 } // namespace fbpp
-
-// Include template implementations for Transaction methods
-// This must be at the very end after both Transaction and Statement are fully defined
-#include "fbpp/core/transaction_templates.hpp"

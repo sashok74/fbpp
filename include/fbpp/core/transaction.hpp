@@ -4,6 +4,7 @@
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/firebird_compat.hpp"
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace fbpp {
@@ -101,7 +102,17 @@ public:
     std::unique_ptr<Batch> createBatch(const std::shared_ptr<Statement>& statement,
                                        bool recordCounts = true,
                                        bool continueOnError = false);
-    
+
+    // Query executor methods for QueryDescriptor pattern
+    template<typename Descriptor>
+    std::vector<typename Descriptor::Output> executeQuery(const typename Descriptor::Input& params);
+
+    template<typename Descriptor>
+    std::optional<typename Descriptor::Output> fetchOne(const typename Descriptor::Input& params);
+
+    template<typename Descriptor>
+    unsigned executeNonQuery(const typename Descriptor::Input& params);
+
     // Non-copyable
     Transaction(const Transaction&) = delete;
     Transaction& operator=(const Transaction&) = delete;

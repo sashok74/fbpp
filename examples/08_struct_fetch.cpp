@@ -465,8 +465,7 @@ int main() {
         auto connection = std::make_unique<Connection>(params);
         auto transaction = connection->StartTransaction();
 
-        auto rows = executeQuery<QueryDescriptor<QueryId::FetchTop100>>(
-            *connection, *transaction, FetchInput{});
+        auto rows = transaction->executeQuery<QueryDescriptor<QueryId::FetchTop100>>(FetchInput{});
         transaction->Commit();
 
         std::cout << "Fetched " << rows.size() << " rows from TABLE_TEST_1\n";
