@@ -7,6 +7,7 @@
 #include <array>
 #include <chrono>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 #if defined(_MSVC_LANG) && (_MSVC_LANG > __cplusplus)
@@ -254,6 +255,66 @@ private:
     int16_t offset_;      // Offset from UTC in minutes
 };
 
+#if FBPP_EXTENDED_TYPES_CPLUSPLUS >= 202002L
+/**
+ * @brief User-facing C++20 type for Firebird TIMESTAMP WITH TIME ZONE
+ *
+ * `TimestampTz` remains the raw Firebird-oriented wrapper. For application code,
+ * prefer `ZonedTimestamp`, which is a microsecond-precision alias over
+ * `std::chrono::zoned_time`.
+ */
+using ZonedTimestamp = std::chrono::zoned_time<std::chrono::microseconds>;
+
+/**
+ * @brief User-facing local timestamp type used with ZonedTimestamp helpers
+ */
+using LocalTimestamp = std::chrono::local_time<std::chrono::microseconds>;
+
+/**
+ * @brief Build a ZonedTimestamp from a timezone name and an absolute UTC time
+ */
+inline ZonedTimestamp makeZonedTimestamp(std::string_view timeZone,
+                                         std::chrono::system_clock::time_point utcTime) {
+    return ZonedTimestamp{
+        std::string(timeZone),
+        std::chrono::time_point_cast<std::chrono::microseconds>(utcTime)
+    };
+}
+
+/**
+ * @brief Build a ZonedTimestamp from a timezone object and an absolute UTC time
+ */
+inline ZonedTimestamp makeZonedTimestamp(const std::chrono::time_zone* timeZone,
+                                         std::chrono::system_clock::time_point utcTime) {
+    return ZonedTimestamp{
+        timeZone,
+        std::chrono::time_point_cast<std::chrono::microseconds>(utcTime)
+    };
+}
+
+/**
+ * @brief Build a ZonedTimestamp from a timezone name and a local timestamp
+ */
+inline ZonedTimestamp makeZonedTimestamp(std::string_view timeZone,
+                                         LocalTimestamp localTime) {
+    return ZonedTimestamp{
+        std::string(timeZone),
+        std::chrono::time_point_cast<std::chrono::microseconds>(localTime)
+    };
+}
+
+/**
+ * @brief Build a ZonedTimestamp from a timezone object and a local timestamp
+ */
+inline ZonedTimestamp makeZonedTimestamp(const std::chrono::time_zone* timeZone,
+                                         LocalTimestamp localTime) {
+    return ZonedTimestamp{
+        timeZone,
+        std::chrono::time_point_cast<std::chrono::microseconds>(localTime)
+    };
+}
+#endif
+
 /**
  * @brief Time type for Firebird TIME
  *
@@ -284,6 +345,11 @@ private:
  * @brief Time with timezone for Firebird TIME WITH TIME ZONE
  *
  * Minimal wrapper for ISC_TIME_TZ. Use IUtil for conversions.
+ *
+ * This is the recommended user-facing type for Firebird `TIME WITH TIME ZONE`.
+ * Unlike `TIMESTAMP WITH TIME ZONE`, a time-of-day value does not carry the date
+ * context needed for robust DST-aware conversion to `std::chrono::zoned_time`, so
+ * fbpp intentionally keeps `TIME_TZ` as a simple raw wrapper.
  */
 class TimeTz {
 public:
@@ -306,20 +372,6 @@ private:
     uint16_t zone_id_; // IANA timezone ID
     int16_t offset_;   // Offset from UTC in minutes
 };
-
-#if FBPP_EXTENDED_TYPES_CPLUSPLUS >= 202002L
-/**
- * @brief User-facing representation of Firebird TIME WITH TIME ZONE
- *
- * `TimeTz` stores the raw Firebird wire-level values (time units, zone id and UTC
- * offset). `TimeWithTz` is the higher-level C++20 representation used in examples,
- * docs and the chrono adapter: local time-of-day plus an IANA time zone name.
- *
- * Use `fbpp::core::TypeAdapter<TimeWithTz>` from `fbpp/adapters/chrono_datetime.hpp`
- * to convert between this alias and Firebird `TIME WITH TIME ZONE`.
- */
-using TimeWithTz = std::pair<std::chrono::hh_mm_ss<std::chrono::microseconds>, std::string>;
-#endif
 
 /**
  * @brief Blob identifier for Firebird BLOB

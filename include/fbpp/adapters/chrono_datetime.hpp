@@ -1,11 +1,14 @@
 #pragma once
 
+#include "fbpp/core/environment.hpp"
+#include "fbpp/core/exception.hpp"
 #include "fbpp/core/type_adapter.hpp"
 #include "fbpp/core/timestamp_utils.hpp"
 #include "fbpp/core/extended_types.hpp"
+#include "fbpp/core/firebird_compat.hpp"
+#include <array>
 #include <chrono>
 #include <string>
-#include <map>
 
 #if defined(_MSVC_LANG) && (_MSVC_LANG > __cplusplus)
 #define FBPP_CHRONO_DATETIME_CPLUSPLUS _MSVC_LANG
@@ -75,126 +78,120 @@ struct TypeAdapter<std::chrono::system_clock::time_point> {
     }
 };
 
-// Type adapter for std::chrono::zoned_time<std::chrono::microseconds>
+// Primary chrono adapter for Firebird TIMESTAMP WITH TIME ZONE.
+//
+// TIME WITH TIME ZONE intentionally stays on fbpp::core::TimeTz because
+// time-only values do not carry the date context needed for robust timezone
+// and DST conversion.
 template<>
 struct TypeAdapter<std::chrono::zoned_time<std::chrono::microseconds>> {
     static constexpr bool is_specialized = true;
 
-    using user_type = std::chrono::zoned_time<std::chrono::microseconds>;
+    using user_type = ZonedTimestamp;
     using firebird_type = TimestampTz;
 
-    // Simple IANA timezone name to ID mapping (subset for demo)
-    static uint16_t get_timezone_id(const std::string& tz_name) {
-        static const std::map<std::string, uint16_t> tz_map = {
-            {"UTC", 0},
-            {"Europe/London", 1},
-            {"Europe/Paris", 2},
-            {"Europe/Berlin", 3},
-            {"Europe/Moscow", 4},
-            {"America/New_York", 100},
-            {"America/Chicago", 101},
-            {"America/Denver", 102},
-            {"America/Los_Angeles", 103},
-            {"Asia/Tokyo", 200},
-            {"Asia/Shanghai", 201},
-            {"Asia/Kolkata", 202},
-            {"Australia/Sydney", 300},
-            {"Pacific/Auckland", 400}
-        };
-
-        auto it = tz_map.find(tz_name);
-        return (it != tz_map.end()) ? it->second : 0;
+    static unsigned to_firebird_fractions(std::chrono::microseconds value) {
+        return static_cast<unsigned>(value.count() / 100);
     }
 
-    static std::string get_timezone_name(uint16_t zone_id) {
-        static const std::map<uint16_t, std::string> id_map = {
-            {0, "UTC"},
-            {1, "Europe/London"},
-            {2, "Europe/Paris"},
-            {3, "Europe/Berlin"},
-            {4, "Europe/Moscow"},
-            {100, "America/New_York"},
-            {101, "America/Chicago"},
-            {102, "America/Denver"},
-            {103, "America/Los_Angeles"},
-            {200, "Asia/Tokyo"},
-            {201, "Asia/Shanghai"},
-            {202, "Asia/Kolkata"},
-            {300, "Australia/Sydney"},
-            {400, "Pacific/Auckland"}
-        };
-
-        auto it = id_map.find(zone_id);
-        return (it != id_map.end()) ? it->second : "UTC";
+    static std::chrono::microseconds from_firebird_fractions(unsigned value) {
+        return std::chrono::microseconds(static_cast<int64_t>(value) * 100);
     }
 
     static firebird_type to_firebird(const user_type& zt) {
-        // Get UTC time
-        auto utc_tp = zt.get_sys_time();
-        auto [fb_date, fb_time] = timestamp_utils::to_firebird_timestamp(utc_tp);
+        try {
+            auto& env = Environment::getInstance();
+            Firebird::ThrowStatusWrapper status(env.getMaster()->getStatus());
+            Firebird::IUtil* util = env.getUtil();
 
-        // Get timezone info
-        std::string tz_name(zt.get_time_zone()->name());
-        uint16_t zone_id = get_timezone_id(tz_name);
+            const auto localTime = std::chrono::time_point_cast<std::chrono::microseconds>(zt.get_local_time());
+            const auto localDay = std::chrono::floor<std::chrono::days>(localTime);
+            const auto ymd = std::chrono::year_month_day{localDay};
+            const auto timeOfDay = std::chrono::hh_mm_ss<std::chrono::microseconds>{
+                std::chrono::duration_cast<std::chrono::microseconds>(localTime - localDay)
+            };
 
-        // Calculate offset in minutes
-        auto info = zt.get_time_zone()->get_info(utc_tp);
-        auto offset = std::chrono::duration_cast<std::chrono::minutes>(info.offset);
-        int16_t offset_minutes = static_cast<int16_t>(offset.count());
+            ISC_TIMESTAMP_TZ raw{};
+            std::string timeZoneName(zt.get_time_zone()->name());
+            util->encodeTimeStampTz(
+                &status,
+                &raw,
+                static_cast<unsigned>(static_cast<int>(ymd.year())),
+                static_cast<unsigned>(ymd.month()),
+                static_cast<unsigned>(ymd.day()),
+                static_cast<unsigned>(timeOfDay.hours().count()),
+                static_cast<unsigned>(timeOfDay.minutes().count()),
+                static_cast<unsigned>(timeOfDay.seconds().count()),
+                to_firebird_fractions(timeOfDay.subseconds()),
+                timeZoneName.c_str()
+            );
 
-        return TimestampTz(fb_date, fb_time, zone_id, offset_minutes);
+            const auto info = zt.get_time_zone()->get_info(zt.get_sys_time());
+            const auto offset = std::chrono::duration_cast<std::chrono::minutes>(info.offset);
+
+            return TimestampTz(
+                static_cast<uint32_t>(raw.utc_timestamp.timestamp_date),
+                static_cast<uint32_t>(raw.utc_timestamp.timestamp_time),
+                static_cast<uint16_t>(raw.time_zone),
+                static_cast<int16_t>(offset.count())
+            );
+        } catch (const Firebird::FbException& e) {
+            throw FirebirdException(e);
+        }
     }
 
     static user_type from_firebird(const firebird_type& fb_tz) {
-        // Reconstruct UTC time
-        auto utc_tp = timestamp_utils::from_firebird_timestamp(
-            fb_tz.getDate(), fb_tz.getTime()
-        );
+        try {
+            auto& env = Environment::getInstance();
+            Firebird::ThrowStatusWrapper status(env.getMaster()->getStatus());
+            Firebird::IUtil* util = env.getUtil();
 
-        // Find timezone name from ID
-        std::string tz_name = get_timezone_name(fb_tz.getZoneId());
+            ISC_TIMESTAMP_TZ raw{};
+            raw.utc_timestamp.timestamp_date = static_cast<ISC_DATE>(fb_tz.getDate());
+            raw.utc_timestamp.timestamp_time = static_cast<ISC_TIME>(fb_tz.getTime());
+            raw.time_zone = static_cast<ISC_USHORT>(fb_tz.getZoneId());
 
-        return user_type{tz_name,
-                        std::chrono::time_point_cast<std::chrono::microseconds>(utc_tp)};
-    }
-};
+            unsigned year{};
+            unsigned month{};
+            unsigned day{};
+            unsigned hours{};
+            unsigned minutes{};
+            unsigned seconds{};
+            unsigned fractions{};
+            std::array<char, 128> timeZoneName{};
 
-// Type adapter for the user-facing TIME WITH TIME ZONE alias declared in
-// fbpp/core/extended_types.hpp.
-template<>
-struct TypeAdapter<TimeWithTz> {
-    static constexpr bool is_specialized = true;
+            util->decodeTimeStampTz(
+                &status,
+                &raw,
+                &year,
+                &month,
+                &day,
+                &hours,
+                &minutes,
+                &seconds,
+                &fractions,
+                static_cast<unsigned>(timeZoneName.size()),
+                timeZoneName.data()
+            );
 
-    using user_type = TimeWithTz;
-    using firebird_type = TimeTz;
+            (void) year;
+            (void) month;
+            (void) day;
+            (void) hours;
+            (void) minutes;
+            (void) seconds;
+            (void) fractions;
 
-    static firebird_type to_firebird(const user_type& time_tz) {
-        // Convert time to Firebird format
-        uint32_t fb_time = timestamp_utils::to_firebird_time(time_tz.first.to_duration());
-
-        // Get timezone ID from name
-        uint16_t zone_id = TypeAdapter<std::chrono::zoned_time<std::chrono::microseconds>>::get_timezone_id(time_tz.second);
-
-        // For time-only, we need to calculate offset based on current date
-        // This is a simplification - real implementation might need a reference date
-        auto now = std::chrono::system_clock::now();
-        auto now_micros = std::chrono::time_point_cast<std::chrono::microseconds>(now);
-        std::chrono::zoned_time<std::chrono::microseconds> zt{time_tz.second, now_micros};
-        auto info = zt.get_time_zone()->get_info(now_micros);
-        auto offset_minutes = std::chrono::duration_cast<std::chrono::minutes>(info.offset);
-
-        return TimeTz(fb_time, zone_id, static_cast<int16_t>(offset_minutes.count()));
-    }
-
-    static user_type from_firebird(const firebird_type& time_tz) {
-        // Convert time from Firebird format
-        auto micros = timestamp_utils::from_firebird_time(time_tz.getTime());
-        std::chrono::hh_mm_ss<std::chrono::microseconds> hms{micros};
-
-        // Get timezone name from ID
-        std::string tz_name = TypeAdapter<std::chrono::zoned_time<std::chrono::microseconds>>::get_timezone_name(time_tz.getZoneId());
-
-        return std::make_pair(hms, tz_name);
+            auto utcTime = timestamp_utils::from_firebird_timestamp(fb_tz.getDate(), fb_tz.getTime());
+            return makeZonedTimestamp(
+                std::string_view(timeZoneName.data()),
+                std::chrono::time_point_cast<std::chrono::microseconds>(utcTime)
+            );
+        } catch (const Firebird::FbException& e) {
+            throw FirebirdException(e);
+        } catch (const std::runtime_error& e) {
+            throw FirebirdException(std::string("Failed to construct ZonedTimestamp: ") + e.what());
+        }
     }
 };
 

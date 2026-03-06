@@ -1160,7 +1160,7 @@ case SQL_TIMESTAMP_TZ:
 case SQL_TIME_TZ:
     if (config.useChrono) {
         // TIME WITH TIME ZONE - используем кастомный тип (нет прямого аналога в chrono)
-        result.cppType = "fbpp::core::TimeWithTz";  // Пока оставляем core тип
+        result.cppType = "fbpp::core::TimeTz";  // Актуальное решение: оставляем raw core тип
         result.needsExtendedTypes = true;
     } else {
         result.cppType = "fbpp::core::TimeTz";
@@ -1523,7 +1523,7 @@ int main() {
 
 ### Проблема 4: TIME WITH TIME ZONE не имеет прямого аналога в std::chrono
 **Симптом:** Нет готового типа для TIME_TZ.
-**Решение:** Пока оставляем `fbpp::core::TimeWithTz`, можно создать custom chrono wrapper в будущем.
+**Решение:** Оставляем `fbpp::core::TimeTz` как простой raw-тип; rich chrono wrapper не нужен.
 
 ---
 

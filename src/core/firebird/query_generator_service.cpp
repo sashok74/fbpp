@@ -192,7 +192,7 @@ TypeMapping mapFieldType(const FieldInfo& field, bool isOutput, const AdapterCon
             break;
         case SQL_TIMESTAMP_TZ:
             if (config.useChronoDatetime) {
-                result.cppType = "std::chrono::zoned_time<std::chrono::microseconds>";
+                result.cppType = "fbpp::core::ZonedTimestamp";
                 result.needsChrono = true;
             } else {
                 result.cppType = "fbpp::core::TimestampTz";

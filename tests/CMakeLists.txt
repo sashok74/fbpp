@@ -177,6 +177,21 @@ target_link_libraries(test_cppdecimal_decfloat PRIVATE
 
 gtest_discover_tests(test_cppdecimal_decfloat)
 
+# C++20 chrono date/time adapter test
+add_executable(test_chrono_datetime
+    adapters/test_chrono_datetime.cpp
+)
+
+target_link_libraries(test_chrono_datetime PRIVATE
+    fbpp
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_chrono_datetime)
+
 # Named parameters test
 add_executable(test_named_parameters
     unit/test_named_parameters.cpp

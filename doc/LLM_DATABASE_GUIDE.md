@@ -59,8 +59,8 @@ query_generator --dsn firebird5:testdb --user SYSDBA --password planomer \
 | DECFLOAT(16/34) | `DecFloat16/34` | IEEE 754-2008 |
 | VARCHAR(n) | `std::string` | |
 | DATE/TIME/TIMESTAMP | `Date/Time/Timestamp` или `std::chrono::*` | |
-| TIME WITH TIME ZONE | `TimeTz` / `TimeWithTz` | raw Firebird wrapper или C++20 alias |
-| TIMESTAMP WITH TIME ZONE | `TimestampTz` | 12 байт |
+| TIME WITH TIME ZONE | `TimeTz` | raw Firebird wrapper |
+| TIMESTAMP WITH TIME ZONE | `TimestampTz` / `ZonedTimestamp` | raw wrapper или основной C++20 chrono тип |
 | BLOB (text) | `std::string` / `TextBlob` | |
 | NULL-able поля | `std::optional<T>` | В Output структурах |
 

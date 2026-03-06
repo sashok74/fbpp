@@ -24,8 +24,8 @@ namespace {
 using Decimal38_8 = fbpp::adapters::TTNumeric<2, -8>;
 using Numeric64_6 = fbpp::adapters::TTNumeric<1, -6>;
 using MicroTime = std::chrono::hh_mm_ss<std::chrono::microseconds>;
-using ZonedMicroTime = std::chrono::zoned_time<std::chrono::microseconds>;
-using TimeWithTz = fbpp::core::TimeWithTz;
+using ZonedTimestamp = fbpp::core::ZonedTimestamp;
+using TimeTz = fbpp::core::TimeTz;
 
 struct ExtendedTypesInsertInput {
     int32_t id;
@@ -36,8 +36,8 @@ struct ExtendedTypesInsertInput {
     std::chrono::year_month_day fDate;
     MicroTime fTime;
     std::chrono::system_clock::time_point fTimestamp;
-    ZonedMicroTime fTimestampTz;
-    TimeWithTz fTimeTz;
+    ZonedTimestamp fTimestampTz;
+    TimeTz fTimeTz;
     std::string fVarchar;
     std::string fBlobText;  // TEXT BLOB автоматически сохраняется из строки
 };
@@ -55,8 +55,8 @@ struct ExtendedTypesOutput {
     std::optional<std::chrono::year_month_day> fDate;
     std::optional<MicroTime> fTime;
     std::optional<std::chrono::system_clock::time_point> fTimestamp;
-    std::optional<ZonedMicroTime> fTimestampTz;
-    std::optional<TimeWithTz> fTimeTz;
+    std::optional<ZonedTimestamp> fTimestampTz;
+    std::optional<TimeTz> fTimeTz;
     std::optional<std::string> fVarchar;
     std::optional<std::string> fBlobText;  // TEXT BLOB автоматически читается в строку
 };
@@ -92,9 +92,8 @@ ExtendedTypesInsertInput makeSampleRow(int32_t newId) {
     MicroTime testTime{timeDuration};
     const sys_days baseDay{testDate};
     const auto timestampMicros = time_point_cast<microseconds>(baseDay + timeDuration);
-    auto tz = std::chrono::locate_zone("Europe/Berlin");
-    ZonedMicroTime timestampTz{tz, timestampMicros};
-    TimeWithTz timeTz{testTime, std::string("Europe/Berlin")};
+    ZonedTimestamp timestampTz = fbpp::core::makeZonedTimestamp("Europe/Berlin", timestampMicros);
+    TimeTz timeTz{fbpp::core::Time{testTime.to_duration()}, 3, 120};
 
     return ExtendedTypesInsertInput{
         newId,
@@ -172,29 +171,34 @@ std::string formatOptionalTimestamp(const std::optional<std::chrono::system_cloc
     return formatTimestamp(*value);
 }
 
-std::string formatZonedTime(const ZonedMicroTime& value) {
+std::string formatZonedTime(const ZonedTimestamp& value) {
     auto sysTime = value.get_sys_time();
     std::ostringstream oss;
     oss << formatTimestamp(sysTime) << " [" << value.get_time_zone()->name() << ']';
     return oss.str();
 }
 
-std::string formatOptionalZonedTime(const std::optional<ZonedMicroTime>& value) {
+std::string formatOptionalZonedTime(const std::optional<ZonedTimestamp>& value) {
     if (!value) {
         return "null";
     }
     return formatZonedTime(*value);
 }
 
-std::string formatTimeWithTz(const TimeWithTz& value) {
-    return formatMicroTime(value.first) + " @" + value.second;
+std::string formatTimeTz(const TimeTz& value) {
+    MicroTime time{fbpp::core::timestamp_utils::from_firebird_time(value.getTime())};
+    std::ostringstream oss;
+    oss << formatMicroTime(time)
+        << " [zone_id=" << value.getZoneId()
+        << ", offset=" << value.getOffset() << "m]";
+    return oss.str();
 }
 
-std::string formatOptionalTimeWithTz(const std::optional<TimeWithTz>& value) {
+std::string formatOptionalTimeTz(const std::optional<TimeTz>& value) {
     if (!value) {
         return "null";
     }
-    return formatTimeWithTz(*value);
+    return formatTimeTz(*value);
 }
 
 static std::pair<bool, std::string> decimalMagnitude(const Int128& value) {
@@ -331,7 +335,7 @@ void printResult(const ExtendedTypesOutput& row) {
     std::cout << "  F_TIME: " << formatOptionalMicroTime(row.fTime) << '\n';
     std::cout << "  F_TIMESHTAMP: " << formatOptionalTimestamp(row.fTimestamp) << '\n';
     std::cout << "  F_TIMESHTAMP_TZ: " << formatOptionalZonedTime(row.fTimestampTz) << '\n';
-    std::cout << "  F_TIME_TZ: " << formatOptionalTimeWithTz(row.fTimeTz) << '\n';
+    std::cout << "  F_TIME_TZ: " << formatOptionalTimeTz(row.fTimeTz) << '\n';
     std::cout << "  F_VARCHAR: " << (row.fVarchar ? *row.fVarchar : "null") << '\n';
     std::cout << "  F_BLOB_T: " << formatOptionalTextBlob(row.fBlobText) << '\n';
 }

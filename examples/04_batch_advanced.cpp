@@ -38,8 +38,8 @@ using Numeric16_6 = fbpp::adapters::TTNumeric<1, -6>;
 using Date = std::chrono::year_month_day;
 using Time = std::chrono::hh_mm_ss<std::chrono::microseconds>;
 using Timestamp = std::chrono::system_clock::time_point;
-using TimestampTz = std::chrono::zoned_time<std::chrono::microseconds>;
-using TimeWithTz = std::pair<std::chrono::hh_mm_ss<std::chrono::microseconds>, std::string>;
+using ZonedTimestamp = fbpp::core::ZonedTimestamp;
+using TimeTz = fbpp::core::TimeTz;
 #endif
 
 // Структура записи для batch операций
@@ -62,9 +62,9 @@ using RecordTuple = std::tuple<
     int16_t,                        // F_SMALINT
 #if __cplusplus >= 202002L
     Time,                          // F_TIME
-    TimeWithTz,                    // F_TIME_TZ
+    TimeTz,                        // F_TIME_TZ
     Timestamp,                     // F_TIMESHTAMP
-    TimestampTz,                   // F_TIMESHTAMP_TZ
+    ZonedTimestamp,                // F_TIMESHTAMP_TZ
 #else
     fbpp::core::Time,
     fbpp::core::TimeTz,
@@ -183,9 +183,9 @@ private:
         Time test_time{std::chrono::duration_cast<std::chrono::microseconds>(time_since_midnight)};
 
         Timestamp test_timestamp = now;
-        TimestampTz test_timestamp_tz{"Europe/Moscow",
-                                      std::chrono::time_point_cast<std::chrono::microseconds>(now)};
-        TimeWithTz test_time_tz = std::make_pair(test_time, "Europe/Moscow");
+        ZonedTimestamp test_timestamp_tz =
+            fbpp::core::makeZonedTimestamp("Europe/Moscow", now);
+        TimeTz test_time_tz{fbpp::core::Time{test_time.to_duration()}, 4, 180};
 #else
         fbpp::core::Date test_date(now);
         fbpp::core::Time test_time(fbpp::core::timestamp_utils::current_time_of_day());
@@ -628,9 +628,9 @@ private:
         auto time_since_midnight = now.time_since_epoch() % std::chrono::days{1};
         Time test_time{std::chrono::duration_cast<std::chrono::microseconds>(time_since_midnight)};
         Timestamp test_timestamp = now;
-        TimestampTz test_timestamp_tz{"Europe/Moscow",
-                                      std::chrono::time_point_cast<std::chrono::microseconds>(now)};
-        TimeWithTz test_time_tz = std::make_pair(test_time, "Europe/Moscow");
+        ZonedTimestamp test_timestamp_tz =
+            fbpp::core::makeZonedTimestamp("Europe/Moscow", now);
+        TimeTz test_time_tz{fbpp::core::Time{test_time.to_duration()}, 4, 180};
 #else
         fbpp::core::Date test_date(now);
         fbpp::core::Time test_time(fbpp::core::timestamp_utils::current_time_of_day());

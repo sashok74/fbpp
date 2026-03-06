@@ -33,8 +33,7 @@ struct TableTestSelectOutput {
 using Decimal38_8 = fbpp::adapters::TTNumeric<2, -8>;
 using Numeric64_6 = fbpp::adapters::TTNumeric<1, -6>;
 using MicroTime = std::chrono::hh_mm_ss<std::chrono::microseconds>;
-using ZonedMicroTime = std::chrono::zoned_time<std::chrono::microseconds>;
-using TimeWithTz = fbpp::core::TimeWithTz;
+using ZonedTimestamp = fbpp::core::ZonedTimestamp;
 
 struct ExtendedTypesInsertInput {
     int32_t id;
@@ -45,8 +44,8 @@ struct ExtendedTypesInsertInput {
     std::chrono::year_month_day fDate;
     MicroTime fTime;
     std::chrono::system_clock::time_point fTimestamp;
-    ZonedMicroTime fTimestampTz;
-    TimeWithTz fTimeTz;
+    ZonedTimestamp fTimestampTz;
+    fbpp::core::TimeTz fTimeTz;
     std::string fVarchar;
 };
 
@@ -63,8 +62,8 @@ struct ExtendedTypesOutput {
     std::optional<std::chrono::year_month_day> fDate;
     std::optional<MicroTime> fTime;
     std::optional<std::chrono::system_clock::time_point> fTimestamp;
-    std::optional<ZonedMicroTime> fTimestampTz;
-    std::optional<TimeWithTz> fTimeTz;
+    std::optional<ZonedTimestamp> fTimestampTz;
+    std::optional<fbpp::core::TimeTz> fTimeTz;
     std::optional<std::string> fVarchar;
 };
 
@@ -293,9 +292,8 @@ TEST_F(StructPackTest, ExtendedTypesRoundTripUsingStructDescriptors) {
     MicroTime testTime{timeDuration};
     const sys_days baseDay{testDate};
     const auto timestampMicros = time_point_cast<microseconds>(baseDay + timeDuration);
-    auto tz = std::chrono::locate_zone("UTC");
-    ZonedMicroTime timestampTz{tz, timestampMicros};
-    TimeWithTz timeTz{testTime, std::string("UTC")};
+    ZonedTimestamp timestampTz = fbpp::core::makeZonedTimestamp("UTC", timestampMicros);
+    fbpp::core::TimeTz timeTz{fbpp::core::Time{testTime.to_duration()}, 0, 0};
 
     ExtendedTypesInsertInput insertRow{
         newId,
@@ -363,8 +361,9 @@ TEST_F(StructPackTest, ExtendedTypesRoundTripUsingStructDescriptors) {
               insertRow.fTimestampTz.get_time_zone()->name());
 
     ASSERT_TRUE(result.fTimeTz.has_value());
-    EXPECT_EQ(result.fTimeTz->first.to_duration(), insertRow.fTimeTz.first.to_duration());
-    EXPECT_EQ(result.fTimeTz->second, insertRow.fTimeTz.second);
+    EXPECT_EQ(result.fTimeTz->getTime(), insertRow.fTimeTz.getTime());
+    EXPECT_EQ(result.fTimeTz->getZoneId(), insertRow.fTimeTz.getZoneId());
+    EXPECT_EQ(result.fTimeTz->getOffset(), insertRow.fTimeTz.getOffset());
 
     ASSERT_TRUE(result.fVarchar.has_value());
     EXPECT_EQ(*result.fVarchar, insertRow.fVarchar);

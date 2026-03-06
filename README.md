@@ -134,7 +134,8 @@ stmt->execute(txn, std::make_tuple(1, big_number, precise, money));
 Firebird time zone types are exposed in two layers:
 
 - `fbpp::core::TimeTz` / `fbpp::core::TimestampTz` are raw Firebird-oriented wrappers.
-- `fbpp::core::TimeWithTz` is the documented C++20 alias for `TIME WITH TIME ZONE` used by the chrono adapter.
+- The C++20 chrono adapter is focused on `TIMESTAMP WITH TIME ZONE` via `fbpp::core::ZonedTimestamp`.
+- `TIME WITH TIME ZONE` intentionally stays on `fbpp::core::TimeTz`, because a time-only value has no date context for reliable timezone/DST conversion.
 
 ### Migration Note
 

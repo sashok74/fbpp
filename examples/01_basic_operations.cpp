@@ -52,8 +52,8 @@ using Numeric16_6 = fbpp::adapters::TTNumeric<1, -6>;
 using Date = std::chrono::year_month_day;
 using Time = std::chrono::hh_mm_ss<std::chrono::microseconds>;
 using Timestamp = std::chrono::system_clock::time_point;
-using TimestampTz = std::chrono::zoned_time<std::chrono::microseconds>;
-using TimeWithTz = std::pair<std::chrono::hh_mm_ss<std::chrono::microseconds>, std::string>;
+using ZonedTimestamp = fbpp::core::ZonedTimestamp;
+using TimeTz = fbpp::core::TimeTz;
 #endif
 
 namespace {
@@ -321,9 +321,9 @@ int main() {
         Time test_time{std::chrono::duration_cast<std::chrono::microseconds>(time_since_midnight)};
 
         Timestamp test_timestamp = now;
-        TimestampTz test_timestamp_tz{"Europe/Moscow",
-                                      std::chrono::time_point_cast<std::chrono::microseconds>(now)};
-        TimeWithTz test_time_tz = std::make_pair(test_time, "Europe/Moscow");
+        ZonedTimestamp test_timestamp_tz =
+            fbpp::core::makeZonedTimestamp("Europe/Moscow", now);
+        TimeTz test_time_tz{fbpp::core::Time{test_time.to_duration()}, 4, 180};
 
         std::cout << "Используем C++20 chrono типы:\n";
 #else
@@ -386,8 +386,8 @@ int main() {
             std::optional<Date>,
             std::optional<Time>,
             std::optional<Timestamp>,
-            std::optional<TimeWithTz>,
-            std::optional<TimestampTz>
+            std::optional<TimeTz>,
+            std::optional<ZonedTimestamp>
         > datetime_row;
 #else
         std::tuple<
@@ -425,11 +425,13 @@ int main() {
                 std::cout << "  TIMESTAMP:  " << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S") << "\n";
             }
             if (read_time_tz) {
+                auto raw_time = Time{fbpp::core::timestamp_utils::from_firebird_time(read_time_tz->getTime())};
                 std::cout << "  TIME_TZ:    ";
-                std::cout << std::setfill('0') << std::setw(2) << read_time_tz->first.hours().count() << ":"
-                         << std::setw(2) << read_time_tz->first.minutes().count() << ":"
-                         << std::setw(2) << read_time_tz->first.seconds().count()
-                         << " " << read_time_tz->second << "\n";
+                std::cout << std::setfill('0') << std::setw(2) << raw_time.hours().count() << ":"
+                         << std::setw(2) << raw_time.minutes().count() << ":"
+                         << std::setw(2) << raw_time.seconds().count()
+                         << " zone_id=" << read_time_tz->getZoneId()
+                         << " offset=" << read_time_tz->getOffset() << "m\n";
             }
             if (read_timestamp_tz) {
                 auto local_time = read_timestamp_tz->get_local_time();

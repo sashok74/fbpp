@@ -132,3 +132,45 @@ TEST_F(QueryGeneratorTest, GeneratesHeadersForSelect) {
 
     fs::remove_all(tempDir);
 }
+
+TEST_F(QueryGeneratorTest, GeneratesChronoHeadersKeepingTimeTzRaw) {
+    namespace fs = std::filesystem;
+
+    fs::path tempDir = fs::temp_directory_path() / "fbpp_query_gen_chrono_test";
+    fs::remove_all(tempDir);
+    fs::create_directories(tempDir);
+
+    fs::path inputJson = tempDir / "queries.json";
+    std::ofstream inputFile(inputJson);
+    inputFile << R"({
+        "SelectAll": "SELECT F_TIME_TZ, F_TIMESHTAMP_TZ FROM TABLE_TEST_1 WHERE ID = :id"
+    })";
+    inputFile.close();
+
+    fs::path outputHeader = tempDir / "queries.generated.hpp";
+    fs::path supportHeader = tempDir / "queries.structs.generated.hpp";
+
+    fs::path generatorExe = fs::path(QUERY_GENERATOR_EXE);
+    ASSERT_TRUE(fs::exists(generatorExe)) << "query_generator executable not found";
+
+    std::string dsn = db_params_.database;
+
+    const auto rc = runProcess(generatorExe, {
+        "--dsn", dsn,
+        "--user", db_params_.user,
+        "--password", db_params_.password,
+        "--charset", db_params_.charset,
+        "--input", inputJson.string(),
+        "--output", outputHeader.string(),
+        "--support", supportHeader.string(),
+        "--use-chrono"
+    });
+    ASSERT_EQ(rc, 0) << "Generator failed with exit code " << rc;
+
+    auto mainContents = slurp(outputHeader);
+    EXPECT_NE(mainContents.find("#include \"fbpp/adapters/chrono_datetime.hpp\""), std::string::npos);
+    EXPECT_NE(mainContents.find("fbpp::core::ZonedTimestamp"), std::string::npos);
+    EXPECT_NE(mainContents.find("fbpp::core::TimeTz"), std::string::npos);
+
+    fs::remove_all(tempDir);
+}
