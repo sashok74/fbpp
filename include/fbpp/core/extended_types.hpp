@@ -7,6 +7,13 @@
 #include <array>
 #include <chrono>
 #include <optional>
+#include <utility>
+
+#if defined(_MSVC_LANG) && (_MSVC_LANG > __cplusplus)
+#define FBPP_EXTENDED_TYPES_CPLUSPLUS _MSVC_LANG
+#else
+#define FBPP_EXTENDED_TYPES_CPLUSPLUS __cplusplus
+#endif
 
 namespace fbpp::core {
 
@@ -300,6 +307,20 @@ private:
     int16_t offset_;   // Offset from UTC in minutes
 };
 
+#if FBPP_EXTENDED_TYPES_CPLUSPLUS >= 202002L
+/**
+ * @brief User-facing representation of Firebird TIME WITH TIME ZONE
+ *
+ * `TimeTz` stores the raw Firebird wire-level values (time units, zone id and UTC
+ * offset). `TimeWithTz` is the higher-level C++20 representation used in examples,
+ * docs and the chrono adapter: local time-of-day plus an IANA time zone name.
+ *
+ * Use `fbpp::core::TypeAdapter<TimeWithTz>` from `fbpp/adapters/chrono_datetime.hpp`
+ * to convert between this alias and Firebird `TIME WITH TIME ZONE`.
+ */
+using TimeWithTz = std::pair<std::chrono::hh_mm_ss<std::chrono::microseconds>, std::string>;
+#endif
+
 /**
  * @brief Blob identifier for Firebird BLOB
  *
@@ -364,3 +385,5 @@ private:
 };
 
 } // namespace fbpp::core
+
+#undef FBPP_EXTENDED_TYPES_CPLUSPLUS

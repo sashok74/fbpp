@@ -7,7 +7,13 @@
 #include <string>
 #include <map>
 
-#if __cplusplus >= 202002L
+#if defined(_MSVC_LANG) && (_MSVC_LANG > __cplusplus)
+#define FBPP_CHRONO_DATETIME_CPLUSPLUS _MSVC_LANG
+#else
+#define FBPP_CHRONO_DATETIME_CPLUSPLUS __cplusplus
+#endif
+
+#if FBPP_CHRONO_DATETIME_CPLUSPLUS >= 202002L
 
 namespace fbpp::core {
 
@@ -153,11 +159,8 @@ struct TypeAdapter<std::chrono::zoned_time<std::chrono::microseconds>> {
     }
 };
 
-// Type adapter for TIME WITH TIME ZONE using pair of time + timezone name
-// Since C++20 doesn't have a standard type for time-only with timezone,
-// we use a pair of hh_mm_ss and timezone name
-using TimeWithTz = std::pair<std::chrono::hh_mm_ss<std::chrono::microseconds>, std::string>;
-
+// Type adapter for the user-facing TIME WITH TIME ZONE alias declared in
+// fbpp/core/extended_types.hpp.
 template<>
 struct TypeAdapter<TimeWithTz> {
     static constexpr bool is_specialized = true;
@@ -197,4 +200,6 @@ struct TypeAdapter<TimeWithTz> {
 
 } // namespace fbpp::core
 
-#endif // C++20
+#endif // FBPP_CHRONO_DATETIME_CPLUSPLUS >= 202002L
+
+#undef FBPP_CHRONO_DATETIME_CPLUSPLUS

@@ -16,15 +16,14 @@ using namespace fbpp::test;
 class CachedStatementsTest : public TempDatabaseTest {
 protected:
     void SetUp() override {
-        // Call base class SetUp first
         TempDatabaseTest::SetUp();
 
-        // Configure cache
         util::Config::cache().enabled = true;
         util::Config::cache().maxStatements = 10;
         util::Config::cache().ttlMinutes = 60;
+    }
 
-        // Create test table specific to cache tests
+    void createTestSchema() override {
         connection_->ExecuteDDL(R"(
             CREATE TABLE test_cached (
                 id INTEGER NOT NULL PRIMARY KEY,

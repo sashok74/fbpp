@@ -454,7 +454,7 @@ int main() {
         }
 
         auto config = nlohmann::json::parse(configFile);
-        auto dbConfig = config["tests"]["persistent_db"];
+        auto dbConfig = config["db"];
 
         ConnectionParams params;
         params.database = dbConfig["server"].get<std::string>() + ":" + dbConfig["path"].get<std::string>();

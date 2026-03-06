@@ -142,7 +142,7 @@ private:
     void initConnection() {
         std::cout << "Подключение к базе данных...\n";
 
-        auto params = fbpp::util::getConnectionParams("tests.persistent_db");
+        auto params = fbpp::util::getConnectionParams("db");
 
         connection = std::make_unique<fbpp::core::Connection>(params);
         std::cout << "✓ Подключение установлено\n";

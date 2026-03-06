@@ -15,11 +15,7 @@ using namespace fbpp::test;
 
 class StatementTest : public TempDatabaseTest {
 protected:
-    void SetUp() override {
-        // Call base class SetUp - logging is now initialized from config
-        TempDatabaseTest::SetUp();
-        
-        // Create additional test table for statement tests
+    void createTestSchema() override {
         auto tra = connection_->Execute(
             "CREATE TABLE statement_test ("
             "  id INTEGER PRIMARY KEY,"

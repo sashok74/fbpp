@@ -70,7 +70,12 @@ auto runOrFail(Fn&& fn) {
 
 } // namespace
 
-class QueryGeneratorIntegrationTest : public PersistentDatabaseTest {};
+class QueryGeneratorIntegrationTest : public SuiteDatabaseTest {
+protected:
+    std::vector<SchemaProfile> schemaProfiles() const override {
+        return {SchemaProfile::TableTest1};
+    }
+};
 
 TEST_F(QueryGeneratorIntegrationTest, TableTest1CrudWorkflow) {
     using namespace generated::queries;

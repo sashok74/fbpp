@@ -10,27 +10,8 @@ using namespace fbpp::test;
 
 class ExtendedTypesConversionTest : public TempDatabaseTest {
 protected:
-    void createTestSchema() override {
-        // Call base implementation to create standard tables if needed (optional)
-        // TempDatabaseTest::createTestSchema(); 
-
-        if (!connection_) return;
-        
-        try {
-            connection_->ExecuteDDL("RECREATE TABLE TEST_EXTENDED_TYPES ("
-                               "ID INTEGER NOT NULL PRIMARY KEY, "
-                               "VAL_INT128 INT128, "
-                               "VAL_DEC16 DECFLOAT(16), "
-                               "VAL_DEC34 DECFLOAT(34), "
-                               "VAL_TIMESTAMP TIMESTAMP, "
-                               "VAL_TIMESTAMP_TZ TIMESTAMP WITH TIME ZONE, "
-                               "VAL_TIME TIME, "
-                               "VAL_TIME_TZ TIME WITH TIME ZONE, "
-                               "VAL_DATE DATE, "
-                               "VAL_NUMERIC_SCALE NUMERIC(18, 4))");
-        } catch (...) {
-            throw;
-        }
+    std::vector<SchemaProfile> schemaProfiles() const override {
+        return {SchemaProfile::ExtendedTypes};
     }
 };
 

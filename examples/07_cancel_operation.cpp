@@ -41,7 +41,7 @@ void thread_print(const std::string& msg) {
 }
 
 ConnectionParams loadConfig() {
-    auto params = fbpp::util::getConnectionParams("tests.persistent_db");
+    auto params = fbpp::util::getConnectionParams("db");
     thread_print("Config loaded successfully\n");
     thread_print("  Database: " + params.database + "\n");
     thread_print("  User: " + params.user + "\n");

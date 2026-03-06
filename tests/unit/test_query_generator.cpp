@@ -5,6 +5,11 @@
 #include <filesystem>
 #include <fstream>
 #include <cstdlib>
+#include <vector>
+
+#ifdef _WIN32
+#include <process.h>
+#endif
 
 using namespace fbpp::test;
 
@@ -18,9 +23,53 @@ std::string slurp(const std::filesystem::path& p) {
     return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
+int runProcess(const std::filesystem::path& executable,
+               const std::vector<std::string>& args) {
+#ifdef _WIN32
+    std::vector<std::string> storage;
+    storage.reserve(args.size() + 1);
+    storage.push_back(executable.string());
+    storage.insert(storage.end(), args.begin(), args.end());
+
+    std::vector<char*> argv;
+    argv.reserve(storage.size() + 1);
+    for (auto& item : storage) {
+        argv.push_back(item.data());
+    }
+    argv.push_back(nullptr);
+
+    return _spawnv(_P_WAIT, executable.string().c_str(), argv.data());
+#else
+    auto quoteArg = [](const std::string& value) {
+        std::string quoted = "\"";
+        for (char ch : value) {
+            if (ch == '"' || ch == '\\') {
+                quoted.push_back('\\');
+            }
+            quoted.push_back(ch);
+        }
+        quoted.push_back('"');
+        return quoted;
+    };
+
+    std::string command = quoteArg(executable.string());
+    for (const auto& arg : args) {
+        command.push_back(' ');
+        command += quoteArg(arg);
+    }
+
+    return std::system(command.c_str());
+#endif
+}
+
 } // namespace
 
-class QueryGeneratorTest : public PersistentDatabaseTest {};
+class QueryGeneratorTest : public SuiteDatabaseTest {
+protected:
+    std::vector<SchemaProfile> schemaProfiles() const override {
+        return {SchemaProfile::TableTest1};
+    }
+};
 
 TEST_F(QueryGeneratorTest, GeneratesHeadersForSelect) {
     namespace fs = std::filesystem;
@@ -39,25 +88,21 @@ TEST_F(QueryGeneratorTest, GeneratesHeadersForSelect) {
     fs::path outputHeader = tempDir / "queries.generated.hpp";
     fs::path supportHeader = tempDir / "queries.structs.generated.hpp";
 
-    fs::path generatorExe = fs::path(BUILD_DIR) / "query_generator";
-#ifdef _WIN32
-    generatorExe.replace_extension(".exe");
-#endif
+    fs::path generatorExe = fs::path(QUERY_GENERATOR_EXE);
     ASSERT_TRUE(fs::exists(generatorExe)) << "query_generator executable not found";
 
-    // Get DSN from environment or use persistent DB params
-    std::string dsn = db_params_.database; // Uses PersistentDatabaseTest connection params
+    // Use the managed suite database prepared by the fixture.
+    std::string dsn = db_params_.database;
 
-    std::string command = "\"" + generatorExe.string() + "\" " +
-        "--dsn \"" + dsn + "\" "
-        "--user SYSDBA "
-        "--password planomer "
-        "--charset UTF8 "
-        "--input \"" + inputJson.string() + "\" "
-        "--output \"" + outputHeader.string() + "\" "
-        "--support \"" + supportHeader.string() + "\"";
-
-    auto rc = std::system(command.c_str());
+    const auto rc = runProcess(generatorExe, {
+        "--dsn", dsn,
+        "--user", db_params_.user,
+        "--password", db_params_.password,
+        "--charset", db_params_.charset,
+        "--input", inputJson.string(),
+        "--output", outputHeader.string(),
+        "--support", supportHeader.string()
+    });
     ASSERT_EQ(rc, 0) << "Generator failed with exit code " << rc;
 
     ASSERT_TRUE(fs::exists(outputHeader));

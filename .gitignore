@@ -78,6 +78,7 @@ logs/
 *.tmp
 *.bak
 *.cache
+tmpclaude-*
 cache/
 .claude
 

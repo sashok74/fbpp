@@ -176,10 +176,6 @@ TEST_F(FirebirdExceptionTest, LongErrorMessage) {
 // ============== Интеграционные тесты ==============
 
 class FirebirdExceptionIntegrationTest : public fbpp::test::TempDatabaseTest {
-protected:
-    void SetUp() override {
-        TempDatabaseTest::SetUp();
-    }
 };
 
 TEST_F(FirebirdExceptionIntegrationTest, InvalidSQLThrowsOurException) {

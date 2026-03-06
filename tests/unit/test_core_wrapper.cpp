@@ -9,18 +9,7 @@
 using namespace fbpp::core;
 using namespace fbpp::test;
 
-class CoreWrapperTest : public TempDatabaseTest {
-protected:
-    void SetUp() override {
-        // Call base class SetUp - logging was initialized previously
-        TempDatabaseTest::SetUp();
-    }
-    
-    void TearDown() override {
-        // Call base class TearDown
-        TempDatabaseTest::TearDown();
-    }
-};
+class CoreWrapperTest : public TempDatabaseTest {};
 
 TEST_F(CoreWrapperTest, EnvironmentSingleton) {
     Environment& env1 = Environment::getInstance();

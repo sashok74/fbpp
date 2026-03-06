@@ -34,37 +34,8 @@ using namespace generated::queries;
  */
 class QueryGeneratorDecFloatTest : public TempDatabaseTest {
 protected:
-    void SetUp() override {
-        TempDatabaseTest::SetUp();
-        createTestSchema();
-    }
-
-    /**
-     * Create test table schema
-     *
-     * Table: DECFLOAT_TEST
-     * - F_ID: INTEGER PRIMARY KEY
-     * - F_DECFLOAT16: DECFLOAT(16) - IEEE 754-2008 decimal64 (8 bytes)
-     * - F_DECFLOAT16_NULLABLE: DECFLOAT(16) - nullable variant
-     * - F_DECFLOAT34: DECFLOAT(34) - IEEE 754-2008 decimal128 (16 bytes)
-     * - F_DECFLOAT34_NULLABLE: DECFLOAT(34) - nullable variant
-     * - F_NAME: VARCHAR(100)
-     */
-    void createTestSchema() override {
-        try {
-            connection_->ExecuteDDL(
-                "CREATE TABLE DECFLOAT_TEST ("
-                "    F_ID INTEGER NOT NULL PRIMARY KEY,"
-                "    F_DECFLOAT16 DECFLOAT(16),"
-                "    F_DECFLOAT16_NULLABLE DECFLOAT(16),"
-                "    F_DECFLOAT34 DECFLOAT(34),"
-                "    F_DECFLOAT34_NULLABLE DECFLOAT(34),"
-                "    F_NAME VARCHAR(100)"
-                ")"
-            );
-        } catch (...) {
-            // Table already exists; ignore.
-        }
+    std::vector<SchemaProfile> schemaProfiles() const override {
+        return {SchemaProfile::DecFloat};
     }
 };
 

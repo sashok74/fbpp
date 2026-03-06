@@ -62,7 +62,7 @@ struct ExtendedTypesOutput {
 };
 
 ConnectionParams loadConnectionParams() {
-    auto params = fbpp::util::getConnectionParams("tests.persistent_db");
+    auto params = fbpp::util::getConnectionParams("db");
     std::cout << "Configuration loaded successfully\n";
     std::cout << "  Database: " << params.database << '\n';
     std::cout << "  User: " << params.user << '\n';

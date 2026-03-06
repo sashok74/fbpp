@@ -34,7 +34,7 @@ int main() {
         printHeader("Named Parameters Example with TABLE_TEST_1");
 
         // Load configuration
-        auto params = fbpp::util::getConnectionParams("tests.persistent_db");
+        auto params = fbpp::util::getConnectionParams("db");
 
         printInfo("Database", params.database);
         printInfo("User", params.user);

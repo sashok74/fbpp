@@ -30,6 +30,12 @@ constexpr int64_t SECONDS_PER_DAY = 86400;
 // Микросекунд в сутках
 constexpr int64_t MICROS_PER_DAY = 86400000000LL;
 
+// Anchor conversions to Unix epoch explicitly. This avoids assuming that
+// system_clock::time_since_epoch() is Unix-based on every STL implementation.
+inline std::chrono::system_clock::time_point unix_epoch() {
+    return std::chrono::system_clock::from_time_t(0);
+}
+
 /**
  * Преобразует std::chrono::system_clock::time_point в Firebird ISC_TIMESTAMP
  * @param tp Точка времени Unix
@@ -37,10 +43,11 @@ constexpr int64_t MICROS_PER_DAY = 86400000000LL;
  */
 inline std::pair<uint32_t, uint32_t> to_firebird_timestamp(
     std::chrono::system_clock::time_point tp) {
-    
-    // Получаем микросекунды с Unix эпохи
-    auto since_epoch = tp.time_since_epoch();
-    auto total_micros = std::chrono::duration_cast<std::chrono::microseconds>(since_epoch).count();
+
+    // Получаем микросекунды с Unix epoch независимо от internal epoch system_clock.
+    auto since_unix_epoch = tp - unix_epoch();
+    auto total_micros =
+        std::chrono::duration_cast<std::chrono::microseconds>(since_unix_epoch).count();
     
     // Вычисляем дни и время дня
     int64_t days = total_micros / MICROS_PER_DAY;
@@ -69,7 +76,7 @@ inline std::pair<uint32_t, uint32_t> to_firebird_timestamp(
  */
 inline std::chrono::system_clock::time_point from_firebird_timestamp(
     uint32_t fb_date, uint32_t fb_time) {
-    
+
     // Дни с Unix эпохи
     int64_t days_since_unix = static_cast<int64_t>(fb_date) - FIREBIRD_EPOCH_DIFF;
     
@@ -79,9 +86,7 @@ inline std::chrono::system_clock::time_point from_firebird_timestamp(
     // Общее количество микросекунд
     int64_t total_micros = days_since_unix * MICROS_PER_DAY + time_micros;
     
-    return std::chrono::system_clock::time_point(
-        std::chrono::microseconds(total_micros)
-    );
+    return unix_epoch() + std::chrono::microseconds(total_micros);
 }
 
 /**
@@ -111,8 +116,9 @@ inline std::chrono::microseconds from_firebird_time(uint32_t fb_time) {
  */
 inline uint32_t current_time_of_day() {
     auto now = std::chrono::system_clock::now();
-    auto today = std::chrono::floor<std::chrono::days>(now.time_since_epoch());
-    auto time_since_midnight = now.time_since_epoch() - today;
+    auto since_unix_epoch = now - unix_epoch();
+    auto today = std::chrono::floor<std::chrono::days>(since_unix_epoch);
+    auto time_since_midnight = since_unix_epoch - today;
     return to_firebird_time(time_since_midnight);
 }
 

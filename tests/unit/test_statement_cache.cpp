@@ -14,16 +14,6 @@ using namespace fbpp::test;
 // Test fixture for statement cache tests
 class StatementCacheTest : public TempDatabaseTest {
 protected:
-    void SetUp() override {
-        // Call base class SetUp - logging was previously initialized from config
-        TempDatabaseTest::SetUp();
-    }
-
-    void TearDown() override {
-        // Call base class TearDown
-        TempDatabaseTest::TearDown();
-    }
-
     void createTestSchema() override {
         connection_->ExecuteDDL(R"(
             CREATE TABLE test_cache (

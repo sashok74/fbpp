@@ -34,39 +34,8 @@ using namespace generated::queries;
  */
 class QueryGeneratorDateTimeTest : public TempDatabaseTest {
 protected:
-    void SetUp() override {
-        TempDatabaseTest::SetUp();
-        createTestSchema();
-    }
-
-    /**
-     * Create test table schema
-     *
-     * Table: DATETIME_TEST
-     * - F_ID: INTEGER PRIMARY KEY
-     * - F_DATE: DATE
-     * - F_DATE_NULLABLE: DATE (nullable)
-     * - F_TIME: TIME
-     * - F_TIMESTAMP: TIMESTAMP
-     * - F_TIMESTAMP_NULLABLE: TIMESTAMP (nullable)
-     * - F_NAME: VARCHAR(100)
-     */
-    void createTestSchema() override {
-        try {
-            connection_->ExecuteDDL(
-                "CREATE TABLE DATETIME_TEST ("
-                "    F_ID INTEGER NOT NULL PRIMARY KEY,"
-                "    F_DATE DATE,"
-                "    F_DATE_NULLABLE DATE,"
-                "    F_TIME TIME,"
-                "    F_TIMESTAMP TIMESTAMP,"
-                "    F_TIMESTAMP_NULLABLE TIMESTAMP,"
-                "    F_NAME VARCHAR(100)"
-                ")"
-            );
-        } catch (...) {
-            // Table already exists; ignore.
-        }
+    std::vector<SchemaProfile> schemaProfiles() const override {
+        return {SchemaProfile::DateTime};
     }
 };
 

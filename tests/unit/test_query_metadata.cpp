@@ -7,22 +7,10 @@
 using namespace fbpp::core;
 using namespace fbpp::test;
 
-class QueryMetadataTest : public PersistentDatabaseTest {
+class QueryMetadataTest : public SuiteDatabaseTest {
 protected:
-    static void SetUpTestSuite() {
-        PersistentDatabaseTest::SetUpTestSuite();
-        auto conn = std::make_unique<Connection>(db_params_);
-        try {
-            conn->ExecuteDDL(
-                "CREATE TABLE test_data ("
-                "    id INTEGER NOT NULL PRIMARY KEY,"
-                "    name VARCHAR(100),"
-                "    amount DOUBLE PRECISION,"
-                "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-                ")");
-        } catch (const FirebirdException&) {
-            // Table already exists; ignore
-        }
+    std::vector<SchemaProfile> schemaProfiles() const override {
+        return {SchemaProfile::QueryMetadata};
     }
 };
 

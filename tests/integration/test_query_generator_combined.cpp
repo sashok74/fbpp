@@ -34,41 +34,8 @@ using namespace generated::queries;
  */
 class QueryGeneratorCombinedTest : public TempDatabaseTest {
 protected:
-    void SetUp() override {
-        TempDatabaseTest::SetUp();
-        createTestSchema();
-    }
-
-    /**
-     * Create test table schema with all adapter types
-     *
-     * Table: COMBINED_TEST
-     * - F_ID: INTEGER PRIMARY KEY
-     * - F_INT128: INT128 (TTMath adapter)
-     * - F_NUMERIC38_2: NUMERIC(38, 2) (TTMath adapter)
-     * - F_DECFLOAT16: DECFLOAT(16) (CppDecimal adapter)
-     * - F_DECFLOAT34: DECFLOAT(34) (CppDecimal adapter)
-     * - F_DATE: DATE (std::chrono adapter)
-     * - F_TIMESTAMP: TIMESTAMP (std::chrono adapter)
-     * - F_NAME: VARCHAR(100)
-     */
-    void createTestSchema() override {
-        try {
-            connection_->ExecuteDDL(
-                "CREATE TABLE COMBINED_TEST ("
-                "    F_ID INTEGER NOT NULL PRIMARY KEY,"
-                "    F_INT128 INT128,"
-                "    F_NUMERIC38_2 NUMERIC(38, 2),"
-                "    F_DECFLOAT16 DECFLOAT(16),"
-                "    F_DECFLOAT34 DECFLOAT(34),"
-                "    F_DATE DATE,"
-                "    F_TIMESTAMP TIMESTAMP,"
-                "    F_NAME VARCHAR(100)"
-                ")"
-            );
-        } catch (...) {
-            // Table already exists; ignore.
-        }
+    std::vector<SchemaProfile> schemaProfiles() const override {
+        return {SchemaProfile::Combined};
     }
 };
 

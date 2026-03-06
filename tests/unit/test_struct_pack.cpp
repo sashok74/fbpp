@@ -177,19 +177,33 @@ struct QueryDescriptor<QueryId::UpdateName> {
 
 } // namespace local
 
-class StructPackTest : public PersistentDatabaseTest {};
+class StructPackTest : public SuiteDatabaseTest {
+protected:
+    std::vector<SchemaProfile> schemaProfiles() const override {
+        return {SchemaProfile::TableTest1};
+    }
+};
 
 TEST_F(StructPackTest, PackAndUnpackStructAgainstTableTest1) {
-    const std::string fetchIdSql = "SELECT FIRST 1 ID FROM TABLE_TEST_1 ORDER BY ID";
-    auto fetchStmt = connection_->prepareStatement(fetchIdSql);
+    const std::string nextIdSql = "SELECT COALESCE(MAX(ID), 0) + 1 FROM TABLE_TEST_1";
+    auto fetchStmt = connection_->prepareStatement(nextIdSql);
     auto fetchTra = connection_->StartTransaction();
     auto fetchCursor = fetchTra->openCursor(fetchStmt);
-
     std::tuple<int32_t> idRow{};
-    ASSERT_TRUE(fetchCursor->fetch(idRow)) << "TABLE_TEST_1 must contain at least one row";
+    ASSERT_TRUE(fetchCursor->fetch(idRow)) << "TABLE_TEST_1 must be accessible";
     int32_t targetId = std::get<0>(idRow);
     fetchCursor->close();
     fetchTra->Commit();
+
+    const int32_t uniqueInteger = 500000 + targetId;
+    const std::string originalName = "struct_pack_" + std::to_string(targetId);
+
+    const std::string insertSql =
+        "INSERT INTO TABLE_TEST_1 (ID, F_INTEGER, F_VARCHAR) VALUES (?, ?, ?)";
+    auto insertStmt = connection_->prepareStatement(insertSql);
+    auto insertTra = connection_->StartTransaction();
+    ASSERT_EQ(insertTra->execute(insertStmt, std::make_tuple(targetId, uniqueInteger, originalName)), 1u);
+    insertTra->Commit();
 
     const std::string selectSql =
         "SELECT ID, F_INTEGER, F_VARCHAR FROM TABLE_TEST_1 WHERE ID = ?";
@@ -219,7 +233,6 @@ TEST_F(StructPackTest, PackAndUnpackStructAgainstTableTest1) {
         *connection_, *selectTra, TableTestSelectInput{targetId});
     ASSERT_EQ(rows.size(), 1u);
     EXPECT_EQ(rows[0].id, targetId);
-    auto originalName = rows[0].fVarchar;
     selectTra->Commit();
 
     // Fetch single row
@@ -249,6 +262,12 @@ TEST_F(StructPackTest, PackAndUnpackStructAgainstTableTest1) {
     fbpp::core::executeNonQuery<local::QueryDescriptor<local::QueryId::UpdateName>>(
         *connection_, *restoreTra, restoreParams);
     restoreTra->Commit();
+
+    const std::string deleteSql = "DELETE FROM TABLE_TEST_1 WHERE ID = ?";
+    auto deleteStmt = connection_->prepareStatement(deleteSql);
+    auto deleteTra = connection_->StartTransaction();
+    ASSERT_EQ(deleteTra->execute(deleteStmt, std::make_tuple(targetId)), 1u);
+    deleteTra->Commit();
 }
 
 TEST_F(StructPackTest, ExtendedTypesRoundTripUsingStructDescriptors) {

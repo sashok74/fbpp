@@ -22,14 +22,13 @@ export FIREBIRD_USER=SYSDBA
 export FIREBIRD_PASSWORD=planomer
 export FIREBIRD_CHARSET=UTF8
 
-# Database paths for tests
-# Temp database: created and dropped for each test
+# Database paths
+# Temp database: created and dropped for managed tests
 export FIREBIRD_DB_PATH=/mnt/test/fbpp_temp_test.fdb
 
-# Persistent database: used by query_generator and persistent tests
-# This database contains TABLE_TEST_1 with full schema of all Firebird types
+# Main example/demo database
 # For local development: short name "testdb" (resolves to /mnt/test/testdb on server)
-export FIREBIRD_PERSISTENT_DB_PATH=testdb
+export FIREBIRD_MAIN_DB_PATH=testdb
 
 echo "========================================="
 echo "fbpp Local Development Environment"
@@ -37,7 +36,7 @@ echo "========================================="
 echo "FIREBIRD_HOST:                 $FIREBIRD_HOST"
 echo "FIREBIRD_PORT:                 $FIREBIRD_PORT"
 echo "FIREBIRD_USER:                 $FIREBIRD_USER"
-echo "FIREBIRD_PERSISTENT_DB_PATH:   $FIREBIRD_PERSISTENT_DB_PATH"
+echo "FIREBIRD_MAIN_DB_PATH:         $FIREBIRD_MAIN_DB_PATH"
 echo "FIREBIRD_DB_PATH:              $FIREBIRD_DB_PATH"
 echo ""
 echo "Environment configured successfully!"

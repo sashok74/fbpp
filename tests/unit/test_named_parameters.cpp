@@ -25,16 +25,6 @@ protected:
 // Test class for tests that need database connection
 class NamedParametersDbTest : public TempDatabaseTest {
 protected:
-    void SetUp() override {
-        // Call base class SetUp
-        TempDatabaseTest::SetUp();
-    }
-
-    void TearDown() override {
-        // Call base class TearDown
-        TempDatabaseTest::TearDown();
-    }
-
     void createTestSchema() override {
         // Base class creates test_table
         TempDatabaseTest::createTestSchema();

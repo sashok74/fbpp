@@ -935,7 +935,7 @@ add_test(NAME QueryGeneratorTTMath COMMAND test_query_generator_ttmath)
 3. **Генерация без адаптеров (baseline):**
    ```bash
    ./build/src/tools/query_generator \
-       --dsn $FIREBIRD_HOST:$FIREBIRD_PERSISTENT_DB_PATH \
+       --dsn $FIREBIRD_HOST:$FIREBIRD_MAIN_DB_PATH \
        --input tests/test_data/query_generator_ttmath_queries.json \
        --output /tmp/test_baseline.hpp \
        --support /tmp/test_baseline_support.hpp
@@ -945,7 +945,7 @@ add_test(NAME QueryGeneratorTTMath COMMAND test_query_generator_ttmath)
 4. **Генерация с TTMath:**
    ```bash
    ./build/src/tools/query_generator \
-       --dsn $FIREBIRD_HOST:$FIREBIRD_PERSISTENT_DB_PATH \
+       --dsn $FIREBIRD_HOST:$FIREBIRD_MAIN_DB_PATH \
        --use-ttmath-numeric \
        --input tests/test_data/query_generator_ttmath_queries.json \
        --output /tmp/test_ttmath.hpp \

@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **NO STUBS OR PLACEHOLDERS** - Every extended type must be fully implemented and tested against live Firebird 5 server
 - **ALL extended types support** is mandatory: INT128, DECFLOAT(16/34), NUMERIC(38,x), TIMESTAMP/TIME WITH TIME ZONE
 - **Live server testing** - Firebird 5 at `firebird5.home.lan:3050` with credentials `SYSDBA`/`planomer`
-- **Persistent database**: `testdb` (contains TABLE_TEST_1 with all Firebird types)
+- **Main example database**: `testdb` (contains TABLE_TEST_1 with all Firebird types)
 - **Temporary database**: `/mnt/test/fbpp_temp_test.fdb` (recreated per test with unique suffix)
 - **Template-heavy design** - Minimize virtual functions, maximize compile-time optimizations
 - **Multiple data formats**: JSON, tuple, and strongly-typed objects for parameters and results
@@ -37,7 +37,7 @@ source scripts/setup_local_env.sh
 
 **Without ENV variables**, the project uses defaults from `config/test_config.json`:
 - Server: `firebird5.home.lan`
-- Persistent DB: `testdb`
+- Main DB: `testdb`
 - Temp DB: `/mnt/test/fbpp_temp_test.fdb`
 
 **Environment Variables**:
@@ -51,7 +51,7 @@ The project uses environment variables for database configuration, affecting bot
 | `FIREBIRD_PORT` | `3050` | `3050` | Firebird server port |
 | `FIREBIRD_USER` | `SYSDBA` | `SYSDBA` | Database user |
 | `FIREBIRD_PASSWORD` | `planomer` | `planomer` | Database password |
-| `FIREBIRD_PERSISTENT_DB_PATH` | `testdb` | `/tmp/testdb.fdb` | Persistent DB (TABLE_TEST_1) |
+| `FIREBIRD_MAIN_DB_PATH` | `testdb` | `/tmp/testdb.fdb` | Main example/demo DB (`db` section) |
 | `FIREBIRD_DB_PATH` | `/mnt/test/fbpp_temp_test.fdb` | `/tmp/fbpp_temp_test.fdb` | Temporary test database |
 | `FIREBIRD_CHARSET` | `UTF8` | `UTF8` | Character set |
 
@@ -70,9 +70,9 @@ The project uses environment variables for database configuration, affecting bot
 **Note**: `build.sh` performs:
 1. Clean build directory
 2. Install Conan dependencies
-3. Configure CMake with Conan toolchain (reads environment variables)
-4. Build entire project (query_generator uses env vars)
-5. **Run all tests automatically** (tests use env vars)
+3. Configure CMake with Conan toolchain
+4. Build entire project
+5. **Run all tests automatically**
 
 ### Manual Building
 ```bash
@@ -104,22 +104,19 @@ gdb ./build/tests/unit/test_statement
 
 ### Database Requirements
 
-**Two databases are used:**
+**Database model:**
 
-1. **Persistent Database** (`testdb`)
+1. **Main Database** (`db`)
    - **Location**: `firebird5.home.lan:testdb` (locally) or `localhost:/tmp/testdb.fdb` (CI/CD)
-   - **Purpose**:
-     - Used by `query_generator` during build for code generation
-     - Used by `PersistentDatabaseTest` and examples
+   - **Purpose**: Examples and shared demo data such as `TABLE_TEST_1`
    - **Contents**: TABLE_TEST_1 with full schema of ALL Firebird 5 types
-   - **Lifecycle**: Created once, reused across tests
-   - **Configuration**: Via `FIREBIRD_PERSISTENT_DB_PATH` or `config/test_config.json["tests"]["persistent_db"]`
+   - **Configuration**: Via `FIREBIRD_MAIN_DB_PATH` or `config/test_config.json["db"]`
 
-2. **Temporary Database** (`fbpp_temp_test.fdb`)
-   - **Location**: `/mnt/test/fbpp_temp_test_{PID}_{N}.fdb` (locally) or `/tmp/fbpp_temp_test_{PID}_{N}.fdb` (CI/CD)
-   - **Purpose**: Used by `TempDatabaseTest` for isolated tests
-   - **Contents**: Schema created per test via `createTestSchema()`
-   - **Lifecycle**: Created and dropped for EACH test
+2. **Managed Test Databases** (`tests.temp_db`)
+   - **Location**: `/mnt/test/fbpp_temp_test_{scope}.fdb` (locally) or `/tmp/fbpp_temp_test_{scope}.fdb` (CI/CD)
+   - **Purpose**: Build-time code generation and runtime tests
+   - **Contents**: Schema created by test fixtures/helpers per test or per suite
+   - **Lifecycle**: Created and dropped automatically by the managed test infrastructure
    - **Configuration**: Via `FIREBIRD_DB_PATH` or `config/test_config.json["tests"]["temp_db"]`
 
 **No manual database setup required** - tests automatically create databases if they don't exist.
@@ -258,14 +255,6 @@ Configuration file: `config/test_config.json`
     "charset": "UTF8"
   },
   "tests": {
-    "persistent_db": {
-      "server": "firebird5.home.lan",
-      "path": "testdb",
-      "user": "SYSDBA",
-      "password": "planomer",
-      "charset": "UTF8",
-      "create_once": true
-    },
     "temp_db": {
       "server": "firebird5.home.lan",
       "path": "/mnt/test/fbpp_temp_test.fdb",
@@ -283,13 +272,13 @@ Configuration file: `config/test_config.json`
 - **Environment overrides**: ENV variables have priority (12-factor app)
 - **Helper utility**: `fbpp::util::getConnectionParams(section)` handles config loading + ENV overrides
   - Examples use section `"db"`
-  - Tests use sections `"tests.persistent_db"` or `"tests.temp_db"`
+  - Managed tests use section `"tests.temp_db"`
 
 **Server configuration:**
 - **Server**: firebird5.home.lan:3050 (local development)
 - **Credentials**: SYSDBA / planomer
 - **Character Set**: UTF8
-- **Persistent DB**: testdb (contains TABLE_TEST_1)
+- **Main DB**: testdb (contains TABLE_TEST_1)
 - **Firebird API**: /opt/firebird/include/firebird/Interface.h
 - **Client Library**: libfbclient.so
 

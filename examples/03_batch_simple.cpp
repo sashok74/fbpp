@@ -48,7 +48,7 @@ int main() {
 
         std::cout << "Загрузка конфигурации...\n";
 
-        auto params = fbpp::util::getConnectionParams("tests.persistent_db");
+        auto params = fbpp::util::getConnectionParams("db");
 
         printInfo("Database", params.database);
         printInfo("Username", params.user);

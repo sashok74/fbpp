@@ -58,9 +58,8 @@ inline json loadConfig() {
  * Environment variables have priority over config file values.
  *
  * Supported sections:
- * - "db" - main database configuration (used by examples)
- * - "tests.persistent_db" - persistent test database (reused across tests)
- * - "tests.temp_db" - temporary test database (recreated per test)
+ * - "db" - main database configuration (used by examples and shared demo data)
+ * - "tests.temp_db" - base config for managed test databases created by fixtures/build helpers
  *
  * Environment variable overrides:
  * - FIREBIRD_HOST - server hostname/IP
@@ -68,8 +67,8 @@ inline json loadConfig() {
  * - FIREBIRD_USER - database user
  * - FIREBIRD_PASSWORD - database password
  * - FIREBIRD_CHARSET - character set
- * - FIREBIRD_PERSISTENT_DB_PATH - path for persistent DB (sections: "db", "tests.persistent_db")
- * - FIREBIRD_DB_PATH - path for temporary DB (section: "tests.temp_db")
+ * - FIREBIRD_MAIN_DB_PATH - path override for main "db" section
+ * - FIREBIRD_DB_PATH - path override for managed test DBs based on "tests.temp_db"
  *
  * Local development (no ENV vars):
  *   firebird5.home.lan:testdb
@@ -77,7 +76,7 @@ inline json loadConfig() {
  * CI/CD (with ENV vars):
  *   localhost:/tmp/testdb.fdb
  *
- * @param section Configuration section to use ("db", "tests.persistent_db", "tests.temp_db")
+ * @param section Configuration section to use ("db" or "tests.temp_db")
  * @return ConnectionParams configured with values from config file and ENV overrides
  * @throws std::runtime_error if section is unknown or config cannot be loaded
  */
@@ -88,8 +87,6 @@ inline ConnectionParams getConnectionParams(const std::string& section = "db") {
     json db_config;
     if (section == "db") {
         db_config = config["db"];
-    } else if (section == "tests.persistent_db") {
-        db_config = config["tests"]["persistent_db"];
     } else if (section == "tests.temp_db") {
         db_config = config["tests"]["temp_db"];
     } else {
@@ -113,12 +110,12 @@ inline ConnectionParams getConnectionParams(const std::string& section = "db") {
         server = server + "/" + env_port;
     }
 
-    // Handle both persistent and temp DB paths
-    // For "db" and "tests.persistent_db": use FIREBIRD_PERSISTENT_DB_PATH
-    // For "tests.temp_db": use FIREBIRD_DB_PATH
-    if (section == "db" || section == "tests.persistent_db") {
-        if (const char* env_persistent_path = std::getenv("FIREBIRD_PERSISTENT_DB_PATH")) {
-            path = env_persistent_path;
+    // Override database path from environment:
+    // - "db" uses FIREBIRD_MAIN_DB_PATH
+    // - "tests.temp_db" uses FIREBIRD_DB_PATH
+    if (section == "db") {
+        if (const char* env_main_path = std::getenv("FIREBIRD_MAIN_DB_PATH")) {
+            path = env_main_path;
         }
     } else if (section == "tests.temp_db") {
         if (const char* env_path = std::getenv("FIREBIRD_DB_PATH")) {

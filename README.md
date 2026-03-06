@@ -8,7 +8,7 @@ Modern, type-safe C++20 wrapper for Firebird 5 database OO API with full support
 
 ## Features
 
-- ( **Full Firebird 5 Extended Types** - INT128, DECFLOAT(16/34), NUMERIC(38,x), TIMESTAMP WITH TIME ZONE
+- ( **Full Firebird 5 Extended Types** - INT128, DECFLOAT(16/34), NUMERIC(38,x), TIME WITH TIME ZONE, TIMESTAMP WITH TIME ZONE
 - <� **Type-Safe** - Compile-time type checking with C++20 templates
 - =� **Multiple Data Formats** - JSON, tuples, and strongly-typed objects
 - � **High Performance** - Statement caching and batch operations
@@ -130,6 +130,18 @@ auto stmt = conn.prepareStatement(
 );
 stmt->execute(txn, std::make_tuple(1, big_number, precise, money));
 ```
+
+Firebird time zone types are exposed in two layers:
+
+- `fbpp::core::TimeTz` / `fbpp::core::TimestampTz` are raw Firebird-oriented wrappers.
+- `fbpp::core::TimeWithTz` is the documented C++20 alias for `TIME WITH TIME ZONE` used by the chrono adapter.
+
+### Migration Note
+
+- `config/test_config.json["tests"]["persistent_db"]` was removed.
+- Main/shared example connections now use `config/test_config.json["db"]`.
+- `FIREBIRD_PERSISTENT_DB_PATH` was renamed to `FIREBIRD_MAIN_DB_PATH`.
+- Managed tests use `config/test_config.json["tests"]["temp_db"]` and create their own databases automatically.
 
 ## Requirements
 

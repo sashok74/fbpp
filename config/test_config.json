@@ -17,14 +17,6 @@
     "rotate_max_files": 3
   },
   "tests": {
-    "persistent_db": {
-      "server": "firebird5.home.lan",
-      "path": "testdb",
-      "user": "SYSDBA",
-      "password": "planomer",
-      "charset": "UTF8",
-      "create_once": true
-    },
     "temp_db": {
       "server": "firebird5.home.lan",
       "path": "/mnt/test/fbpp_temp_test.fdb",

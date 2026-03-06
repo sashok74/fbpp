@@ -6,21 +6,7 @@
 using namespace fbpp::core;
 using namespace fbpp::test;
 
-class CancelOperationTest : public TempDatabaseTest {
-protected:
-    void SetUp() override {
-        // Call base class SetUp
-        TempDatabaseTest::SetUp();
-
-    }
-
-    void TearDown() override {
-        // Call base class TearDown
-        TempDatabaseTest::TearDown();
-    }
-
-    // No additional schema needed for basic tests
-};
+class CancelOperationTest : public TempDatabaseTest {};
 
 // Test basic enable/disable operations
 TEST_F(CancelOperationTest, EnableDisableCancelOperations) {
