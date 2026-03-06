@@ -3,14 +3,27 @@
 include(CMakeFindDependencyMacro)
 
 # Find required dependencies
-find_dependency(spdlog REQUIRED)
+list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
+find_dependency(Firebird REQUIRED)
 find_dependency(nlohmann_json REQUIRED)
 
 # Include the targets file
 include("${CMAKE_CURRENT_LIST_DIR}/fbppTargets.cmake")
 
+set_property(TARGET fbpp::fbpp APPEND PROPERTY
+    INTERFACE_LINK_LIBRARIES Firebird::Firebird
+)
+
+get_target_property(_fbpp_firebird_include_dirs Firebird::Firebird INTERFACE_INCLUDE_DIRECTORIES)
+if(_fbpp_firebird_include_dirs)
+    set_property(TARGET fbpp::fbpp APPEND PROPERTY
+        INTERFACE_INCLUDE_DIRECTORIES "${_fbpp_firebird_include_dirs}"
+    )
+endif()
+unset(_fbpp_firebird_include_dirs)
+
 # Provide variables for compatibility
-set(fbpp_INCLUDE_DIRS "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
+set_and_check(fbpp_INCLUDE_DIRS "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
 set(fbpp_LIBRARIES fbpp::fbpp)
 
 # Check required components

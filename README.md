@@ -153,7 +153,6 @@ Firebird time zone types are exposed in two layers:
 ### Dependencies (managed by Conan)
 
 - GoogleTest 1.14+ (testing only)
-- spdlog 1.12+
 - nlohmann_json 3.11+
 
 ## Documentation

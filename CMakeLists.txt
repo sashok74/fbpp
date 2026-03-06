@@ -9,11 +9,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/build)
 
 # Find Conan packages
-find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
-
-# Include GoogleTest module for gtest_discover_tests
-include(GoogleTest)
 
 include(cmake/FindFirebird.cmake)
 find_package(Firebird REQUIRED)
@@ -57,31 +53,13 @@ set_target_properties(fbpp PROPERTIES
 )
 target_include_directories(fbpp PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    $<BUILD_INTERFACE:${FIREBIRD_INCLUDE_DIRS}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-# Add Firebird include directories
-# On Ubuntu/Debian, Firebird headers are in /usr/include/firebird/
-message(STATUS "FIREBIRD_INCLUDE_DIRS: ${FIREBIRD_INCLUDE_DIRS}")
-
-# CMake by default filters out /usr/include as it's a system directory
-# We need to work around this by checking if it's really /usr/include and handle it
-if(FIREBIRD_INCLUDE_DIRS STREQUAL "/usr/include")
-    # If Firebird is in /usr/include, headers are in /usr/include/firebird/
-    # We need to make sure this gets added. Since CMake filters /usr/include,
-    # we'll use target_compile_options to add it explicitly
-    target_compile_options(fbpp PUBLIC -I/usr/include)
-    message(STATUS "Added /usr/include explicitly via compile options")
-else()
-    # For non-standard locations, use normal include directories
-    target_include_directories(fbpp PUBLIC ${FIREBIRD_INCLUDE_DIRS})
-    message(STATUS "Added Firebird include directories: ${FIREBIRD_INCLUDE_DIRS}")
-endif()
-
 target_link_libraries(fbpp
     PUBLIC
-        ${FIREBIRD_LIBRARIES}
+        $<BUILD_INTERFACE:Firebird::Firebird>
         nlohmann_json::nlohmann_json
         ttmath
         cppdecimal
@@ -119,6 +97,7 @@ endif()
 # Build tests
 option(BUILD_TESTING "Build tests" ON)
 if(BUILD_TESTING)
+    find_package(GTest REQUIRED)
     enable_testing()
     
     # Basic infrastructure tests
@@ -137,8 +116,8 @@ endif()
 # Installation rules
 include(GNUInstallDirs)
 
-# Install fbpp library and dependencies
-install(TARGETS fbpp ttmath cppdecimal
+# Install fbpp library
+install(TARGETS fbpp
     EXPORT fbppTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -148,6 +127,11 @@ install(TARGETS fbpp ttmath cppdecimal
 
 # Install headers
 install(DIRECTORY include/fbpp
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
+)
+
+install(DIRECTORY include/fbpp_util
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
 )
@@ -173,6 +157,11 @@ install(EXPORT fbppTargets
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fbpp
 )
 
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindFirebird.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fbpp
+)
+
 # Create and install version file
 include(CMakePackageConfigHelpers)
 write_basic_package_version_file(
@@ -186,6 +175,7 @@ configure_package_config_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/fbppConfig.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/fbppConfig.cmake"
     INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fbpp
+    PATH_VARS CMAKE_INSTALL_INCLUDEDIR
 )
 
 # Install config files

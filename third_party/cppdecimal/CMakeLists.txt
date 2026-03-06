@@ -21,7 +21,7 @@ add_library(cppdecimal STATIC
 
 target_include_directories(cppdecimal PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
+    $<INSTALL_INTERFACE:include/cppdecimal>
 )
 
 # Required definitions for decNumber
@@ -45,10 +45,11 @@ install(FILES include/decimal
 
 # Install library
 install(TARGETS cppdecimal
-    EXPORT cppdecimalTargets
+    EXPORT fbppTargets
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include/cppdecimal
 )
 
 # Install license

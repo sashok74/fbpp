@@ -18,6 +18,11 @@ install(DIRECTORY ttmath/
     FILES_MATCHING PATTERN "*.h"
 )
 
+install(TARGETS ttmath
+    EXPORT fbppTargets
+    INCLUDES DESTINATION include
+)
+
 # Install license
 install(FILES LICENSE
     DESTINATION share/licenses/ttmath

@@ -73,6 +73,14 @@ find_package_handle_standard_args(Firebird DEFAULT_MSG
 if(FIREBIRD_FOUND)
     set(FIREBIRD_LIBRARIES ${FIREBIRD_LIBRARY})
     set(FIREBIRD_INCLUDE_DIRS ${FIREBIRD_INCLUDE_DIR})
+
+    if(NOT TARGET Firebird::Firebird)
+        add_library(Firebird::Firebird UNKNOWN IMPORTED)
+        set_target_properties(Firebird::Firebird PROPERTIES
+            IMPORTED_LOCATION "${FIREBIRD_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${FIREBIRD_INCLUDE_DIR}"
+        )
+    endif()
 endif()
 
 mark_as_advanced(FIREBIRD_INCLUDE_DIR FIREBIRD_LIBRARY)
