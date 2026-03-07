@@ -353,16 +353,8 @@ Every new feature test MUST cover ALL extended types:
 
 ## Key Documentation
 
-- **doc/FIREBIRD_TYPES_HANDLING.md** - Critical type handling rules (MUST READ)
-- **doc/firebird_oo_api_doc.md** - Firebird OO API reference (121KB)
-- **doc/FIREBIRD_BUFFER_AND_TYPES.md** - Buffer layouts and type mappings
-- **doc/EXTENDED_TYPES_ADAPTERS.md** - Type adapter architecture (29KB)
-- **doc/NAMED_PARAMETERS.md** - Named parameter implementation
-- **doc/PREPARED_STATEMENT_CACHE_SPEC.md** - Statement caching specification
-- **doc/TUPLE_PACKER_ARCHITECTURE.md** - Tuple packer design
-- **doc/LIB_V1_ARCHITECTURE.md** - Library v1 architecture overview
-- **doc/firebird_types_guide.md** - Type system guide
-- **doc/examples/** - 13 Firebird OO API examples
+- **doc/fbpp.md** - Canonical library guide: architecture, package layout, Firebird API coverage, type mapping, and query generator
+- **examples/** - Runtime usage examples
 
 ## Dependencies
 
@@ -413,7 +405,7 @@ fbpp/
 │   ├── test_base.hpp         # Test base class
 │   └── CMakeLists.txt
 ├── examples/                 # Usage examples (10 examples)
-├── doc/                      # Documentation (10 docs)
+├── doc/                      # Canonical library guide
 ├── third_party/              # Vendored libraries
 │   ├── ttmath/              # Big integer library
 │   └── cppdecimal/          # IEEE decimal library
@@ -432,47 +424,50 @@ fbpp/
 3. **Epoch difference** - Firebird epoch is 1858-11-17, Unix is 1970-01-01 (40587 days difference)
 4. **Wire types** - Check wire_type field for exact type identification
 5. **Precision checks** - NUMERIC with precision > 18 requires INT128 storage (16 bytes)
-6. **Statement caching** - Use Connection::prepare() or prepareReusable() for frequently executed queries
+6. **Statement caching** - Use `Connection::prepareStatement()`; cache behavior is configured on the connection
 7. **Named parameters** - Use `:param_name` syntax, not `?` or `$1`
 8. **CHAR vs VARCHAR** - CHAR (SQL_TEXT) is fixed-length, space-padded; VARCHAR (SQL_VARYING) has 2-byte length prefix
 9. **NULL handling** - Always check null indicator byte in message buffers
-10. **Cancel operations** - Enable with Connection::enableCancelOperations() before calling cancelOperation()
+10. **Cancel operations** - Enable with `cancelOperation(CancelOperation::ENABLE)` before using `RAISE` or `ABORT`
 
 ## Feature Highlights
 
 ### Statement Caching
 ```cpp
 // Connection maintains a statement cache
-auto stmt = conn.prepare("SELECT * FROM users WHERE id = ?");  // Cached
+auto stmt = conn.prepareStatement("SELECT * FROM users WHERE id = ?");  // Cached
 // Subsequent calls reuse cached statement
-auto stmt2 = conn.prepare("SELECT * FROM users WHERE id = ?"); // Cache hit
+auto stmt2 = conn.prepareStatement("SELECT * FROM users WHERE id = ?"); // Cache hit
 ```
 
 ### Named Parameters
 ```cpp
 // Use :param_name syntax
-auto stmt = conn.prepare("SELECT * FROM users WHERE name = :name AND age > :min_age");
-stmt.executeQuery(txn, {{"name", "John"}, {"min_age", 18}});
+auto stmt = conn.prepareStatement("SELECT * FROM users WHERE name = :name AND age > :min_age");
+nlohmann::json params = {{"name", "John"}, {"min_age", 18}};
+auto cursor = txn->openCursor(stmt, params);
 ```
 
 ### Multiple Data Formats
 ```cpp
 // JSON format
 nlohmann::json params = {{"id", 123}, {"name", "Alice"}};
-stmt.execute(txn, params);
+txn->execute(stmt, params);
 
 // Tuple format
-auto result = stmt.executeQuery(txn).fetchOne<int, std::string, double>();
+auto cursor = txn->openCursor(stmt);
+std::tuple<int, std::string, double> row;
+cursor->fetch(row);
 
 // Strongly-typed objects (via adapters)
-User user = fetchObject<User>(result_set);
+auto rows = fbpp::core::executeQuery<MyQueryDescriptor>(conn, inputStruct);
 ```
 
 ### Cancel Operations
 ```cpp
-conn.enableCancelOperations();
+conn.cancelOperation(fbpp::core::CancelOperation::ENABLE);
 // In another thread:
-conn.cancelOperation(fb_cancel_raise);  // Interrupt long-running query
+conn.cancelOperation(fbpp::core::CancelOperation::RAISE);  // Interrupt long-running query
 ```
 
 ## Utilities for Code Analysis

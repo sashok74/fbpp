@@ -2,6 +2,8 @@
 
 #include "fbpp/core/connection.hpp"
 #include "fbpp/core/message_metadata.hpp"
+#include "fbpp/schema/adapter_config.hpp"
+#include "fbpp/schema/type_mapper.hpp"
 
 #include <optional>
 #include <string>
@@ -10,38 +12,13 @@
 
 namespace fbpp::core {
 
-struct AdapterConfig {
-    bool useTTMathNumeric = false;
-    bool useTTMathInt128 = false;
-    bool useChronoDatetime = false;
-    bool useCppDecimalDecFloat = false;
-    bool useStringForTextBlob = false;
-    bool generateAliases = true;
-};
+// Backward-compatibility aliases — types now live in fbpp::schema
+using AdapterConfig = fbpp::schema::AdapterConfig;
+using TypeMapping = fbpp::schema::CppTypeInfo;
 
 struct QueryDefinition {
     std::string name;
     std::string sql;
-};
-
-struct TypeMapping {
-    struct ScaledNumericInfo {
-        int intWords;  // For TTNumeric<IntWords, Scale>
-        int16_t scale;
-    };
-
-    std::string cppType;
-    bool needsOptional = false;
-    bool needsString = false;
-    bool needsExtendedTypes = false;
-
-    // Adapter flags
-    bool needsTTMath = false;
-    bool needsChrono = false;
-    bool needsCppDecimal = false;
-
-    // For TTNumeric type aliases
-    std::optional<ScaledNumericInfo> scaledInfo;
 };
 
 struct FieldSpec {

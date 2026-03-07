@@ -48,7 +48,8 @@ conn.Execute(sql);
 ```cpp
 std::string user_input = get_user_input();
 auto stmt = conn.prepareStatement("SELECT * FROM users WHERE name = ?");
-stmt->executeQuery(txn, std::make_tuple(user_input));
+auto txn = conn.StartTransaction();
+auto cursor = txn->openCursor(stmt, std::make_tuple(user_input));
 ```
 
 ### 2. Store Credentials Securely
@@ -109,13 +110,7 @@ params.timeout = std::chrono::seconds{30};
 
 ## Known Security Limitations
 
-See [PROJECT_ANALYSIS.md](doc/PROJECT_ANALYSIS.md) for:
-
-- Current architectural limitations
-- Known issues
-- Planned security improvements
-
-### Current Limitations
+Current limitations:
 
 1. **No connection pool** - May lead to connection exhaustion in high-load scenarios
 2. **No prepared statement limit** - Statement cache could grow unbounded (use cache config)

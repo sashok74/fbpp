@@ -92,7 +92,7 @@ TEST_F(StatementTest, ExecuteWithNullParameters) {
 - Update relevant documentation in `doc/` directory
 - Add examples for new features
 - Update `CLAUDE.md` if adding new patterns
-- Keep `PROJECT_ANALYSIS.md` roadmap in sync
+- Keep `doc/fbpp.md` aligned with the public architecture and package surface
 
 ## Pull Request Process
 

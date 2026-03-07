@@ -680,4 +680,43 @@ fbpp_add_package_smoke_test(package_smoke_codegen
     ${CMAKE_CURRENT_SOURCE_DIR}/package_smoke/codegen
 )
 
-set_tests_properties(package_smoke_core package_smoke_codegen PROPERTIES RUN_SERIAL TRUE)
+fbpp_add_package_smoke_test(package_smoke_schema
+    ${CMAKE_CURRENT_SOURCE_DIR}/package_smoke/schema
+)
+
+set_tests_properties(package_smoke_core package_smoke_codegen package_smoke_schema
+    PROPERTIES RUN_SERIAL TRUE)
+
+# TypeMapper unit test (no live DB needed)
+add_executable(test_type_mapper
+    unit/test_type_mapper.cpp
+)
+
+target_link_libraries(test_type_mapper PRIVATE
+    fbpp_schema
+    GTest::gtest
+    GTest::gtest_main
+    ${FIREBIRD_LIBRARIES}
+)
+
+fbpp_configure_cxx_target(test_type_mapper)
+gtest_discover_tests(test_type_mapper)
+
+# QueryAnalyzer integration test (requires live DB)
+add_executable(test_query_analyzer
+    unit/test_query_analyzer.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_query_analyzer PRIVATE
+    fbpp_codegen
+    fbpp_schema
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+fbpp_configure_cxx_target(test_query_analyzer)
+gtest_discover_tests(test_query_analyzer)

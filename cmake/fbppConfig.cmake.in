@@ -2,9 +2,9 @@
 
 include(CMakeFindDependencyMacro)
 
-set(fbpp_SUPPORTED_COMPONENTS core codegen)
+set(fbpp_SUPPORTED_COMPONENTS core schema codegen)
 if(NOT fbpp_FIND_COMPONENTS)
-    set(fbpp_FIND_COMPONENTS core codegen)
+    set(fbpp_FIND_COMPONENTS core)
 endif()
 
 foreach(_fbpp_component IN LISTS fbpp_FIND_COMPONENTS)
@@ -23,13 +23,19 @@ find_dependency(Firebird REQUIRED)
 find_dependency(nlohmann_json REQUIRED)
 
 set(_fbpp_need_core FALSE)
-if("core" IN_LIST fbpp_FIND_COMPONENTS OR "codegen" IN_LIST fbpp_FIND_COMPONENTS)
+if("core" IN_LIST fbpp_FIND_COMPONENTS OR "schema" IN_LIST fbpp_FIND_COMPONENTS
+        OR "codegen" IN_LIST fbpp_FIND_COMPONENTS)
     set(_fbpp_need_core TRUE)
 endif()
 
 if(_fbpp_need_core)
     include("${CMAKE_CURRENT_LIST_DIR}/fbppCoreTargets.cmake")
     set(fbpp_core_FOUND TRUE)
+endif()
+
+if("schema" IN_LIST fbpp_FIND_COMPONENTS OR "codegen" IN_LIST fbpp_FIND_COMPONENTS)
+    include("${CMAKE_CURRENT_LIST_DIR}/fbppSchemaTargets.cmake")
+    set(fbpp_schema_FOUND TRUE)
 endif()
 
 if("codegen" IN_LIST fbpp_FIND_COMPONENTS)

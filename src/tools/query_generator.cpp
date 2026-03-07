@@ -72,7 +72,7 @@ Examples:
   query_generator --dsn firebird5:/db.fdb --input queries.json --output queries.hpp --support queries.structs.hpp \
     --use-ttmath-numeric --use-ttmath-int128 --use-chrono --use-cppdecimal
 
-For more information, see doc/QUERY_GENERATOR_USER_GUIDE.md
+For more information, see doc/fbpp.md
 )";
 }
 

@@ -8,141 +8,23 @@ Modern, type-safe C++20 wrapper for Firebird 5 database OO API with full support
 
 ## Features
 
-- ( **Full Firebird 5 Extended Types** - INT128, DECFLOAT(16/34), NUMERIC(38,x), TIME WITH TIME ZONE, TIMESTAMP WITH TIME ZONE
-- <� **Type-Safe** - Compile-time type checking with C++20 templates
-- =� **Multiple Data Formats** - JSON, tuples, and strongly-typed objects
-- � **High Performance** - Statement caching and batch operations
-- =' **Developer Friendly** - Named parameters, RAII resource management
-- >� **Well Tested** - Comprehensive test suite with 100+ tests
+- **Full Firebird 5 Extended Types** - INT128, DECFLOAT(16/34), NUMERIC(38,x), TIME WITH TIME ZONE, TIMESTAMP WITH TIME ZONE
+- **Type-Safe** - Compile-time type checking with C++20 templates
+- **Multiple Data Formats** - JSON, tuples, and strongly-typed objects
+- **High Performance** - Statement caching and batch operations
+- **Developer Friendly** - Named parameters and RAII resource management
+- **Well Tested** - Comprehensive automated test suite
 
 ## Quick Start
 
-### Installation
+Use the canonical guide [doc/fbpp.md](doc/fbpp.md) for the current runtime model, type mapping rules, and query generator workflow.
 
-#### Using Conan (Recommended)
+For concrete up-to-date code, start with:
 
-```bash
-# Add to conanfile.txt
-[requires]
-fbpp/1.0.0
-
-# Or via command line
-conan install --requires=fbpp/1.0.0
-```
-
-#### From Source
-
-```bash
-git clone https://github.com/sashok74/fbpp.git
-cd fbpp
-./build.sh Release
-sudo cmake --install build
-```
-
-### Basic Example
-
-```cpp
-#include <fbpp/fbpp.hpp>
-#include <iostream>
-
-int main() {
-    using namespace fbpp::core;
-
-    // Connect to database
-    Connection conn(ConnectionParams{
-        .database = "localhost:employee.fdb",
-        .user = "SYSDBA",
-        .password = "masterkey"
-    });
-
-    // Start transaction
-    auto txn = conn.StartTransaction();
-
-    // Prepare and execute query
-    auto stmt = conn.prepareStatement(
-        "SELECT emp_no, first_name, salary FROM employee WHERE dept_no = ?"
-    );
-
-    auto rs = stmt->executeQuery(txn, std::make_tuple("Sales"));
-
-    // Fetch results as tuples
-    while (auto row = rs->fetchOne<int, std::string, double>()) {
-        auto [emp_no, name, salary] = *row;
-        std::cout << name << ": $" << salary << std::endl;
-    }
-
-    txn->Commit();
-    return 0;
-}
-```
-
-### JSON Example
-
-```cpp
-#include <fbpp/fbpp.hpp>
-#include <nlohmann/json.hpp>
-
-using json = nlohmann::json;
-
-// Insert with JSON
-json employee = {
-    {"emp_no", 1001},
-    {"first_name", "John"},
-    {"last_name", "Doe"},
-    {"salary", 75000.00}
-};
-
-auto stmt = conn.prepareStatement(
-    "INSERT INTO employee (emp_no, first_name, last_name, salary) "
-    "VALUES (?, ?, ?, ?)"
-);
-stmt->execute(txn, employee);
-
-// Fetch as JSON
-auto rs = stmt->executeQuery(txn);
-while (auto row = rs->fetchOneJSON()) {
-    std::cout << row.dump(2) << std::endl;
-}
-```
-
-### Extended Types Example
-
-```cpp
-#include <fbpp/fbpp_extended.hpp>
-#include <fbpp/adapters/ttmath_int128.hpp>
-#include <fbpp/adapters/cppdecimal_decfloat.hpp>
-
-using namespace fbpp::core;
-using namespace fbpp::adapters;
-
-// INT128 support
-Int128 big_number = make_int128("170141183460469231731687303715884105727");
-
-// DECFLOAT(34) support
-dec::DecQuad precise("123456789012345678901234.567890123456789");
-
-// NUMERIC(38,2) with scale
-TTNumeric<2, -2> money;  // 38 digits, 2 decimal places
-
-auto stmt = conn.prepareStatement(
-    "INSERT INTO financial_data (id, big_num, precise_num, money) "
-    "VALUES (?, ?, ?, ?)"
-);
-stmt->execute(txn, std::make_tuple(1, big_number, precise, money));
-```
-
-Firebird time zone types are exposed in two layers:
-
-- `fbpp::core::TimeTz` / `fbpp::core::TimestampTz` are raw Firebird-oriented wrappers.
-- The C++20 chrono adapter is focused on `TIMESTAMP WITH TIME ZONE` via `fbpp::core::ZonedTimestamp`.
-- `TIME WITH TIME ZONE` intentionally stays on `fbpp::core::TimeTz`, because a time-only value has no date context for reliable timezone/DST conversion.
-
-### Migration Note
-
-- `config/test_config.json["tests"]["persistent_db"]` was removed.
-- Main/shared example connections now use `config/test_config.json["db"]`.
-- `FIREBIRD_PERSISTENT_DB_PATH` was renamed to `FIREBIRD_MAIN_DB_PATH`.
-- Managed tests use `config/test_config.json["tests"]["temp_db"]` and create their own databases automatically.
+- `examples/01_basic_operations.cpp`
+- `examples/02_json_operations.cpp`
+- `examples/08_struct_fetch.cpp`
+- `examples/09_extended_types_struct.cpp`
 
 ## Requirements
 
@@ -157,7 +39,8 @@ Firebird time zone types are exposed in two layers:
 
 ## Documentation
 
-- [API Reference](https://sashok74.github.io/fbpp/) 
+- [Canonical Library Guide](doc/fbpp.md)
+- [API Reference](https://sashok74.github.io/fbpp/)
 
 ## Examples
 
@@ -193,9 +76,9 @@ cd build && ctest --output-on-failure
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| Linux (x64) |  Tested | Ubuntu 20.04+, Debian 11+ |
-| Windows (x64) | =� Should work | Not regularly tested |
-| macOS (x64/ARM) | =� Should work | Not regularly tested |
+| Linux (x64) | Tested | Ubuntu 20.04+, Debian 11+ |
+| Windows (x64) | Supported | Regularly validated in repository builds |
+| macOS (x64/ARM) | Unverified | No regular validation in this repository |
 
 ## Contributing
 
@@ -215,30 +98,3 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 - **Issues**: [GitHub Issues](https://github.com/sashok74/fbpp/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/sashok74/fbpp/discussions)
-
-## Project Status
-
-**Current Version:** 1.0.0-alpha
-
-Active development. API may change before 1.0.0 stable release.
-
-### Roadmap
-
-- [x] Core API (Connection, Transaction, Statement, ResultSet)
-- [x] Extended types support (INT128, DECFLOAT, NUMERIC(38,x))
-- [x] JSON integration
-- [x] Named parameters
-- [x] Statement caching
-- [x] Batch operations
-- [x] Cancel operations
-- [ ] Connection pool
-- [ ] Async API (C++20 coroutines)
-- [ ] BLOB streaming API
-- [ ] Events API
-- [ ] Services API (backup/restore)
-
-See [PROJECT_ANALYSIS.md](doc/PROJECT_ANALYSIS.md) for detailed project analysis and roadmap.
-
----
-
-**Note:** This is an alpha release. While the core functionality is stable and tested, the API may change before the 1.0.0 stable release. Production use is not recommended until version 1.0.0.

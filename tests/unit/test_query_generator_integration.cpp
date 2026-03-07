@@ -92,9 +92,9 @@ TEST_F(QueryGeneratorIntegrationTest, TableTest1CrudWorkflow) {
         // INSERT
         std::cout << "[integration] Insert step" << std::endl;
         TABLE_TEST_1_IIn insertParams{};
-        assignField(insertParams.param1, testInteger);
-        assignField(insertParams.param2, initialLabel);
-        assignField(insertParams.param3, true);
+        assignField(insertParams.fInteger, testInteger);
+        assignField(insertParams.fVarchar, initialLabel);
+        assignField(insertParams.fBoolean, true);
 
         auto insertCount = runOrFail([&] {
             auto statement = connection_->prepareStatement(std::string(QueryDescriptor<QueryId::TABLE_TEST_1_I>::sql));
@@ -105,8 +105,8 @@ TEST_F(QueryGeneratorIntegrationTest, TableTest1CrudWorkflow) {
         // SELECT
         std::cout << "[integration] Select step" << std::endl;
         TABLE_TEST_1_SIn selectParams{};
-        assignField(selectParams.param1, testInteger);
-        assignField(selectParams.param2, initialLabel);
+        assignField(selectParams.fInteger, testInteger);
+        assignField(selectParams.fVarchar, initialLabel);
 
         auto selectedRows = runOrFail([&] {
             return executeQuery<QueryDescriptor<QueryId::TABLE_TEST_1_S>>(
@@ -124,8 +124,8 @@ TEST_F(QueryGeneratorIntegrationTest, TableTest1CrudWorkflow) {
         // UPDATE
         std::cout << "[integration] Update step" << std::endl;
         TABLE_TEST_1_UIn updateParams{};
-        assignField(updateParams.param1, updatedLabel);
-        assignField(updateParams.param2, newId);
+        assignField(updateParams.fVarchar, updatedLabel);
+        assignField(updateParams.id, newId);
 
         auto updateCount = runOrFail([&] {
             auto statement = connection_->prepareStatement(std::string(QueryDescriptor<QueryId::TABLE_TEST_1_U>::sql));
@@ -134,8 +134,8 @@ TEST_F(QueryGeneratorIntegrationTest, TableTest1CrudWorkflow) {
         ASSERT_EQ(updateCount, 1u);
 
         // SELECT updated row
-        assignField(selectParams.param1, testInteger);
-        assignField(selectParams.param2, updatedLabel);
+        assignField(selectParams.fInteger, testInteger);
+        assignField(selectParams.fVarchar, updatedLabel);
         auto updatedRows = runOrFail([&] {
             return executeQuery<QueryDescriptor<QueryId::TABLE_TEST_1_S>>(
                 *connection_, *transaction, selectParams);
@@ -150,7 +150,7 @@ TEST_F(QueryGeneratorIntegrationTest, TableTest1CrudWorkflow) {
         // DELETE
         std::cout << "[integration] Delete step" << std::endl;
         TABLE_TEST_1_DIn deleteParams{};
-        assignField(deleteParams.param1, newId);
+        assignField(deleteParams.id, newId);
 
         auto deleteCount = runOrFail([&] {
             auto statement = connection_->prepareStatement(std::string(QueryDescriptor<QueryId::TABLE_TEST_1_D>::sql));
@@ -160,8 +160,8 @@ TEST_F(QueryGeneratorIntegrationTest, TableTest1CrudWorkflow) {
 
         // Ensure row no longer present within transaction
         std::cout << "[integration] Verify absence" << std::endl;
-        assignField(selectParams.param1, testInteger);
-        assignField(selectParams.param2, updatedLabel);
+        assignField(selectParams.fInteger, testInteger);
+        assignField(selectParams.fVarchar, updatedLabel);
         auto afterDeleteRows = runOrFail([&] {
             return executeQuery<QueryDescriptor<QueryId::TABLE_TEST_1_S>>(
                 *connection_, *transaction, selectParams);

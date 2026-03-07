@@ -68,6 +68,22 @@ target_link_libraries(fbpp_core
 
 fbpp_configure_cxx_target(fbpp_core)
 
+# Schema introspection and query analysis layer
+add_library(fbpp_schema STATIC
+    src/schema/type_mapper.cpp
+    src/schema/query_analyzer.cpp
+)
+
+target_include_directories(fbpp_schema PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${FIREBIRD_INCLUDE_DIRS}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+target_link_libraries(fbpp_schema PUBLIC fbpp_core)
+
+fbpp_configure_cxx_target(fbpp_schema)
+
 # Code generation helpers built on top of the runtime layer
 add_library(fbpp_codegen STATIC
     src/core/firebird/query_generator_service.cpp
@@ -82,6 +98,7 @@ target_include_directories(fbpp_codegen PUBLIC
 target_link_libraries(fbpp_codegen
     PUBLIC
         fbpp_core
+        fbpp_schema
 )
 
 fbpp_configure_cxx_target(fbpp_codegen)
@@ -110,6 +127,7 @@ fbpp_configure_cxx_target(fbpp_test_support)
 add_library(fbpp ALIAS fbpp_core)
 add_library(fbpp::fbpp ALIAS fbpp_core)
 add_library(fbpp::fbpp_core ALIAS fbpp_core)
+add_library(fbpp::fbpp_schema ALIAS fbpp_schema)
 add_library(fbpp::fbpp_codegen ALIAS fbpp_codegen)
 add_library(fbpp::fbpp_test_support ALIAS fbpp_test_support)
 
@@ -164,6 +182,15 @@ install(TARGETS fbpp_core
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
+install(TARGETS fbpp_schema
+    EXPORT fbppSchemaTargets
+    COMPONENT schema
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
 install(TARGETS fbpp_codegen
     EXPORT fbppCodegenTargets
     COMPONENT codegen
@@ -194,6 +221,12 @@ install(DIRECTORY include/fbpp/adapters
     FILES_MATCHING PATTERN "*.hpp"
 )
 
+install(DIRECTORY include/fbpp/schema
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fbpp
+    COMPONENT schema
+    FILES_MATCHING PATTERN "*.hpp"
+)
+
 install(FILES
     include/fbpp/query_generator_service.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fbpp
@@ -212,6 +245,13 @@ install(EXPORT fbppCoreTargets
     NAMESPACE fbpp::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fbpp
     COMPONENT core
+)
+
+install(EXPORT fbppSchemaTargets
+    FILE fbppSchemaTargets.cmake
+    NAMESPACE fbpp::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fbpp
+    COMPONENT schema
 )
 
 install(EXPORT fbppCodegenTargets
