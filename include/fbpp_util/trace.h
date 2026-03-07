@@ -4,7 +4,7 @@
 #include <string>
 #include <string_view>
 
-namespace util {
+namespace fbpp::util {
 
 enum class TraceLevel {
     info,
@@ -20,6 +20,13 @@ public:
                      std::string_view message) = 0;
 };
 
+/**
+ * Install a process-wide trace sink for fbpp runtime diagnostics.
+ *
+ * The sink pointer is published atomically and observed from all runtime code.
+ * The sink implementation itself must be safe for concurrent calls if multiple
+ * fbpp objects are used from different threads.
+ */
 void setTraceSink(TraceSink* sink);
 TraceSink* getTraceSink();
 
@@ -38,5 +45,4 @@ inline void trace(TraceLevel level,
     }
 }
 
-} // namespace util
-
+} // namespace fbpp::util

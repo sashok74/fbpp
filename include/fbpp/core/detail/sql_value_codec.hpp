@@ -14,6 +14,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -54,6 +55,10 @@ inline bool isNull(const int16_t* ptr) {
 
 inline bool isTextBlob(const FieldInfo* field) {
     return field && field->type == SQL_BLOB && field->subType == 1;
+}
+
+inline unsigned normalize_sql_type(unsigned type) {
+    return type & ~1u;
 }
 
 inline ISC_QUAD createBlob(Transaction* transaction, const std::vector<uint8_t>& data) {
@@ -136,6 +141,22 @@ inline std::string normalize_scientific(const std::string& str) {
     return mantissa;
 }
 
+template<typename Target, typename Source>
+Target checked_narrow(Source value, const char* sqlTypeName) {
+    if (value < static_cast<Source>(std::numeric_limits<Target>::min()) ||
+        value > static_cast<Source>(std::numeric_limits<Target>::max())) {
+        throw FirebirdException(std::string("Value out of range for ") + sqlTypeName);
+    }
+    return static_cast<Target>(value);
+}
+
+template<typename FloatType>
+std::string floating_to_string(FloatType value) {
+    std::ostringstream oss;
+    oss << std::setprecision(std::numeric_limits<FloatType>::max_digits10) << value;
+    return oss.str();
+}
+
 template<typename T>
 void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPtr);
 
@@ -166,22 +187,138 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
         }
     }
 
-    if constexpr (std::is_same_v<ValueType, double>) {
-        if (ctx.field && ctx.field->scale < 0) {
-            const int scale = -ctx.field->scale;
-            const int64_t factor = pow10_int(scale);
-            int64_t scaled = round_scaled(value * static_cast<double>(factor));
-            if (ctx.field->type == SQL_SHORT || ctx.field->type == (SQL_SHORT | 1)) {
-                int16_t v = static_cast<int16_t>(scaled);
-                std::memcpy(dataPtr, &v, sizeof(int16_t));
-            } else if (ctx.field->type == SQL_LONG || ctx.field->type == (SQL_LONG | 1)) {
-                int32_t v = static_cast<int32_t>(scaled);
-                std::memcpy(dataPtr, &v, sizeof(int32_t));
-            } else {
-                std::memcpy(dataPtr, &scaled, sizeof(int64_t));
+    if constexpr (std::is_integral_v<ValueType> && !std::is_same_v<ValueType, bool>) {
+        if (ctx.field) {
+            const unsigned fieldType = normalize_sql_type(ctx.field->type);
+            const int64_t numericValue = static_cast<int64_t>(value);
+
+            if (ctx.field->scale < 0) {
+                switch (fieldType) {
+                    case SQL_SHORT: {
+                        const int64_t scaled = numericValue * pow10_int(-ctx.field->scale);
+                        const int16_t v = checked_narrow<int16_t>(scaled, "SMALLINT");
+                        std::memcpy(dataPtr, &v, sizeof(v));
+                        setNotNull(ctx.nullIndicator);
+                        return;
+                    }
+                    case SQL_LONG: {
+                        const int64_t scaled = numericValue * pow10_int(-ctx.field->scale);
+                        const int32_t v = checked_narrow<int32_t>(scaled, "INTEGER");
+                        std::memcpy(dataPtr, &v, sizeof(v));
+                        setNotNull(ctx.nullIndicator);
+                        return;
+                    }
+                    case SQL_INT64: {
+                        const int64_t scaled = numericValue * pow10_int(-ctx.field->scale);
+                        std::memcpy(dataPtr, &scaled, sizeof(scaled));
+                        setNotNull(ctx.nullIndicator);
+                        return;
+                    }
+                    default:
+                        write_sql_value(ctx, std::to_string(numericValue), dataPtr);
+                        return;
+                }
             }
-            setNotNull(ctx.nullIndicator);
-            return;
+
+            switch (fieldType) {
+                case SQL_SHORT: {
+                    const int16_t v = checked_narrow<int16_t>(numericValue, "SMALLINT");
+                    std::memcpy(dataPtr, &v, sizeof(v));
+                    setNotNull(ctx.nullIndicator);
+                    return;
+                }
+                case SQL_LONG: {
+                    const int32_t v = checked_narrow<int32_t>(numericValue, "INTEGER");
+                    std::memcpy(dataPtr, &v, sizeof(v));
+                    setNotNull(ctx.nullIndicator);
+                    return;
+                }
+                case SQL_INT64: {
+                    const int64_t v = numericValue;
+                    std::memcpy(dataPtr, &v, sizeof(v));
+                    setNotNull(ctx.nullIndicator);
+                    return;
+                }
+                case SQL_FLOAT: {
+                    const float v = static_cast<float>(numericValue);
+                    std::memcpy(dataPtr, &v, sizeof(v));
+                    setNotNull(ctx.nullIndicator);
+                    return;
+                }
+                case SQL_DOUBLE:
+                case SQL_D_FLOAT: {
+                    const double v = static_cast<double>(numericValue);
+                    std::memcpy(dataPtr, &v, sizeof(v));
+                    setNotNull(ctx.nullIndicator);
+                    return;
+                }
+                case SQL_BOOLEAN: {
+                    const uint8_t b = numericValue != 0 ? 1 : 0;
+                    std::memcpy(dataPtr, &b, sizeof(b));
+                    setNotNull(ctx.nullIndicator);
+                    return;
+                }
+                default:
+                    break;
+            }
+        }
+    } else if constexpr (std::is_floating_point_v<ValueType>) {
+        if (ctx.field) {
+            const unsigned fieldType = normalize_sql_type(ctx.field->type);
+
+            if (ctx.field->scale < 0) {
+                const int scale = -ctx.field->scale;
+                const int64_t factor = pow10_int(scale);
+                const int64_t scaled = round_scaled(static_cast<double>(value) * static_cast<double>(factor));
+
+                switch (fieldType) {
+                    case SQL_SHORT: {
+                        const int16_t v = checked_narrow<int16_t>(scaled, "SMALLINT");
+                        std::memcpy(dataPtr, &v, sizeof(v));
+                        setNotNull(ctx.nullIndicator);
+                        return;
+                    }
+                    case SQL_LONG: {
+                        const int32_t v = checked_narrow<int32_t>(scaled, "INTEGER");
+                        std::memcpy(dataPtr, &v, sizeof(v));
+                        setNotNull(ctx.nullIndicator);
+                        return;
+                    }
+                    case SQL_INT64: {
+                        std::memcpy(dataPtr, &scaled, sizeof(scaled));
+                        setNotNull(ctx.nullIndicator);
+                        return;
+                    }
+                    default:
+                        write_sql_value(ctx, floating_to_string(value), dataPtr);
+                        return;
+                }
+            }
+
+            switch (fieldType) {
+                case SQL_FLOAT: {
+                    const float v = static_cast<float>(value);
+                    std::memcpy(dataPtr, &v, sizeof(v));
+                    setNotNull(ctx.nullIndicator);
+                    return;
+                }
+                case SQL_DOUBLE:
+                case SQL_D_FLOAT: {
+                    const double v = static_cast<double>(value);
+                    std::memcpy(dataPtr, &v, sizeof(v));
+                    setNotNull(ctx.nullIndicator);
+                    return;
+                }
+                case SQL_DEC16:
+                case SQL_DEC34:
+                case SQL_INT128:
+                case SQL_TEXT:
+                case SQL_VARYING:
+                    write_sql_value(ctx, floating_to_string(value), dataPtr);
+                    return;
+                default:
+                    break;
+            }
         }
     } else if constexpr (std::is_same_v<ValueType, std::string> || std::is_same_v<ValueType, const char*>) {
         std::string strValue;

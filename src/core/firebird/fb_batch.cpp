@@ -63,7 +63,7 @@ BatchResult Batch::execute(Transaction* transaction) {
         throw FirebirdException("Valid active transaction required for batch execution");
     }
 
-    util::trace(util::TraceLevel::info, "Batch",
+    fbpp::util::trace(fbpp::util::TraceLevel::info, "Batch",
                 [&](auto& oss) {
                     oss << "Executing batch with " << impl_->messageCount_ << " messages";
                 });
@@ -105,7 +105,7 @@ BatchResult Batch::execute(Transaction* transaction) {
                     errorBuf[sizeof(errorBuf) - 1] = 0;
                     result.errors.push_back(std::string("Message ") + std::to_string(i) + ": " + errorBuf);
 
-                    util::trace(util::TraceLevel::error, "Batch",
+                    fbpp::util::trace(fbpp::util::TraceLevel::error, "Batch",
                                 [&](auto& oss) {
                                     oss << "Batch message " << i << " failed: " << errorBuf;
                                 });
@@ -143,7 +143,7 @@ BatchResult Batch::execute(Transaction* transaction) {
         impl_->batch_->release();
         impl_->batch_ = nullptr;
 
-        util::trace(util::TraceLevel::info, "Batch",
+        fbpp::util::trace(fbpp::util::TraceLevel::info, "Batch",
                     [&](auto& oss) {
                         oss << "Batch execution complete: success=" << result.successCount
                             << " failed=" << result.failedCount
@@ -151,7 +151,7 @@ BatchResult Batch::execute(Transaction* transaction) {
                     });
         
     } catch (const Firebird::FbException& e) {
-        util::trace(util::TraceLevel::error, "Batch",
+        fbpp::util::trace(fbpp::util::TraceLevel::error, "Batch",
                     [](auto& oss) { oss << "Batch execution failed (Firebird exception)"; });
         throw FirebirdException(e);
     }
@@ -169,7 +169,7 @@ void Batch::cancel() {
         impl_->batch_->release();
         impl_->batch_ = nullptr;
         impl_->messageCount_ = 0;
-        util::trace(util::TraceLevel::info, "Batch",
+        fbpp::util::trace(fbpp::util::TraceLevel::info, "Batch",
                     [](auto& oss) { oss << "Batch cancelled"; });
     } catch (const Firebird::FbException& e) {
         throw FirebirdException(e);

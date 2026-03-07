@@ -62,7 +62,7 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
         } catch (const Firebird::FbException& e) {
             FirebirdException fbppEx(e);
 
-            util::trace(util::TraceLevel::error, "StatementCache",
+            fbpp::util::trace(fbpp::util::TraceLevel::error, "StatementCache",
                         [&](auto& oss) {
                             oss << "Failed to prepare SQL: " << actualSql << "\n"
                                 << "Error: " << fbppEx.what() << "\n"
@@ -161,7 +161,7 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
     } catch (const Firebird::FbException& e) {
         FirebirdException fbppEx(e);
 
-        util::trace(util::TraceLevel::error, "StatementCache",
+        fbpp::util::trace(fbpp::util::TraceLevel::error, "StatementCache",
                     [&](auto& oss) {
                         oss << "Failed to prepare SQL: " << actualSql << "\n"
                             << "Error: " << fbppEx.what() << "\n"
@@ -235,7 +235,7 @@ void StatementCache::setEnabled(bool enabled) {
     }
 
     config_.enabled = enabled;
-    util::trace(util::TraceLevel::info, "StatementCache",
+    fbpp::util::trace(fbpp::util::TraceLevel::info, "StatementCache",
                 [&](auto& oss) { oss << "Cache " << (enabled ? "enabled" : "disabled"); });
 }
 
@@ -249,14 +249,14 @@ void StatementCache::setMaxSize(size_t maxSize) {
         evictLRU();
     }
 
-    util::trace(util::TraceLevel::info, "StatementCache",
+    fbpp::util::trace(fbpp::util::TraceLevel::info, "StatementCache",
                 [&](auto& oss) { oss << "Cache max size set to " << maxSize; });
 }
 
 void StatementCache::setTtlMinutes(size_t ttlMinutes) {
     std::lock_guard<std::mutex> lock(mutex_);
     config_.ttlMinutes = ttlMinutes;
-    util::trace(util::TraceLevel::info, "StatementCache",
+    fbpp::util::trace(fbpp::util::TraceLevel::info, "StatementCache",
                 [&](auto& oss) { oss << "Cache TTL set to " << ttlMinutes << " minutes"; });
 }
 

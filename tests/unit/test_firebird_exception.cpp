@@ -31,6 +31,7 @@ TEST_F(FirebirdExceptionTest, ConstructorFromString) {
     EXPECT_EQ(ex.getErrorCode(), 0);
     EXPECT_EQ(ex.getSQLState(), "HY000");  // Default SQL state
     EXPECT_EQ(ex.getSQLCode(), 0);
+    EXPECT_TRUE(ex.getStatusVector().empty());
     
     // getErrorMessages should be empty or contain the message
     auto messages = ex.getErrorMessages();
@@ -63,12 +64,26 @@ TEST_F(FirebirdExceptionTest, ConversionFromFbException) {
     
     // Проверяем что error code установлен
     EXPECT_EQ(ex.getErrorCode(), 335544580);
+
+    // SQLCODE должен быть вычислен из исходного status vector
+    EXPECT_EQ(ex.getSQLCode(),
+              isc_sqlcode(reinterpret_cast<const ISC_STATUS*>(status->getErrors())));
     
     // SQL State должен быть установлен
     EXPECT_FALSE(ex.getSQLState().empty());
     
     // Должен быть хотя бы один error message
     EXPECT_GE(ex.getErrorMessages().size(), 1u);
+
+    ASSERT_GE(ex.getStatusVector().size(), 2u);
+    EXPECT_EQ(ex.getStatusVector()[0].tag, isc_arg_gds);
+    EXPECT_EQ(ex.getStatusVector()[0].payloadKind,
+              FirebirdStatusEntry::PayloadKind::integer);
+    EXPECT_EQ(ex.getStatusVector()[0].numericValue, 335544580);
+    EXPECT_EQ(ex.getStatusVector()[1].tag, isc_arg_string);
+    EXPECT_EQ(ex.getStatusVector()[1].payloadKind,
+              FirebirdStatusEntry::PayloadKind::text);
+    EXPECT_EQ(ex.getStatusVector()[1].textValue, "TEST_TABLE");
     
     // Cleanup
     status->dispose();
@@ -111,6 +126,8 @@ TEST_F(FirebirdExceptionTest, ErrorChain) {
     
     // Первый error code должен быть сохранен
     EXPECT_EQ(ex.getErrorCode(), 335544321);
+    EXPECT_EQ(ex.getSQLCode(),
+              isc_sqlcode(reinterpret_cast<const ISC_STATUS*>(status->getErrors())));
     
     // Cleanup
     status->dispose();
@@ -309,4 +326,28 @@ TEST_F(FirebirdExceptionTest, SQLStateMapping) {
         
         status->dispose();
     }
+}
+
+TEST_F(FirebirdExceptionTest, StatusVectorSnapshotSurvivesStatusLifetime) {
+    auto& env = Environment::getInstance();
+    Firebird::IStatus* status = env.getMaster()->getStatus();
+
+    intptr_t errorVector[] = {
+        isc_arg_gds,
+        335544580,
+        isc_arg_string,
+        reinterpret_cast<intptr_t>("TEST_TABLE"),
+        isc_arg_end
+    };
+
+    status->setErrors(errorVector);
+    Firebird::FbException fbEx(status);
+    FirebirdException ex(fbEx);
+
+    status->dispose();
+
+    const auto& snapshot = ex.getStatusVector();
+    ASSERT_EQ(snapshot.size(), 2u);
+    EXPECT_EQ(snapshot[0].numericValue, 335544580);
+    EXPECT_EQ(snapshot[1].textValue, "TEST_TABLE");
 }

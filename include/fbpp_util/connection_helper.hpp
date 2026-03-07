@@ -4,11 +4,9 @@
 #include <nlohmann/json.hpp>
 #include "fbpp/core/connection.hpp"
 
-namespace fbpp {
-namespace util {
+namespace fbpp::util {
 
 using json = nlohmann::json;
-using namespace fbpp::core;
 
 json loadConfig();
 
@@ -38,10 +36,10 @@ json loadConfig();
  *   localhost:/tmp/testdb.fdb
  *
  * @param section Configuration section to use ("db" or "tests.temp_db")
- * @return ConnectionParams configured with values from config file and ENV overrides
+ * @return fbpp::core::ConnectionParams configured with values from config file
+ *         and ENV overrides
  * @throws std::runtime_error if section is unknown or config cannot be loaded
  */
-ConnectionParams getConnectionParams(const std::string& section = "db");
+fbpp::core::ConnectionParams getConnectionParams(const std::string& section = "db");
 
-} // namespace util
-} // namespace fbpp
+} // namespace fbpp::util

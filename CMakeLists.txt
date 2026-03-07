@@ -155,49 +155,76 @@ endif()
 include(GNUInstallDirs)
 
 # Install exported libraries
-install(TARGETS fbpp_core fbpp_codegen
-    EXPORT fbppTargets
+install(TARGETS fbpp_core
+    EXPORT fbppCoreTargets
+    COMPONENT core
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-# Install headers
-install(DIRECTORY include/fbpp
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+install(TARGETS fbpp_codegen
+    EXPORT fbppCodegenTargets
+    COMPONENT codegen
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# Install public headers
+install(DIRECTORY include/fbpp/core
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fbpp
+    COMPONENT core
     FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
 )
 
-install(FILES
-    include/fbpp_util/trace.h
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fbpp_util
-)
-
-# Install main convenience headers
 install(FILES
     include/fbpp/fbpp.hpp
     include/fbpp/fbpp_extended.hpp
     include/fbpp/fbpp_all.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fbpp
+    COMPONENT core
 )
 
-# Install adapters headers
 install(DIRECTORY include/fbpp/adapters
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fbpp
+    COMPONENT core
     FILES_MATCHING PATTERN "*.hpp"
 )
 
+install(FILES
+    include/fbpp/query_generator_service.hpp
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fbpp
+    COMPONENT codegen
+)
+
+install(FILES
+    include/fbpp_util/trace.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fbpp_util
+    COMPONENT core
+)
+
 # Export targets
-install(EXPORT fbppTargets
-    FILE fbppTargets.cmake
+install(EXPORT fbppCoreTargets
+    FILE fbppCoreTargets.cmake
     NAMESPACE fbpp::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fbpp
+    COMPONENT core
+)
+
+install(EXPORT fbppCodegenTargets
+    FILE fbppCodegenTargets.cmake
+    NAMESPACE fbpp::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fbpp
+    COMPONENT codegen
 )
 
 install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindFirebird.cmake"
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fbpp
+    COMPONENT core
 )
 
 # Create and install version file
@@ -221,4 +248,5 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/fbppConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/fbppConfigVersion.cmake"
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fbpp
+    COMPONENT core
 )

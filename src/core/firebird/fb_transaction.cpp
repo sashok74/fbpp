@@ -25,7 +25,7 @@ Transaction::Transaction(Connection* connection, Firebird::ITransaction* transac
 Transaction::~Transaction() {
     // Auto-rollback if transaction is still active
     if (active_ && transaction_) {
-        util::trace(util::TraceLevel::warn, "Transaction",
+        fbpp::util::trace(fbpp::util::TraceLevel::warn, "Transaction",
                     [](auto& oss) {
                         oss << "Transaction destroyed while still active; rolling back";
                     });
@@ -76,7 +76,7 @@ Transaction& Transaction::operator=(Transaction&& other) noexcept {
 
 void Transaction::Commit() {
     if (!active_ || !transaction_) {
-        util::trace(util::TraceLevel::error, "Transaction",
+        fbpp::util::trace(fbpp::util::TraceLevel::error, "Transaction",
                     [](auto& oss) { oss << "Commit requested on inactive transaction"; });
         throw FirebirdException("Transaction is not active");
     }
@@ -88,11 +88,11 @@ void Transaction::Commit() {
         transaction_ = nullptr;
         active_ = false;
 
-        util::trace(util::TraceLevel::info, "Transaction",
+        fbpp::util::trace(fbpp::util::TraceLevel::info, "Transaction",
                     [](auto& oss) { oss << "Transaction committed"; });
     }
     catch (const Firebird::FbException& e) {
-        util::trace(util::TraceLevel::error, "Transaction",
+        fbpp::util::trace(fbpp::util::TraceLevel::error, "Transaction",
                     [](auto& oss) { oss << "Commit failed (Firebird exception)"; });
         throw FirebirdException(e);
     }
@@ -100,7 +100,7 @@ void Transaction::Commit() {
 
 void Transaction::Rollback() {
     if (!active_ || !transaction_) {
-        util::trace(util::TraceLevel::error, "Transaction",
+        fbpp::util::trace(fbpp::util::TraceLevel::error, "Transaction",
                     [](auto& oss) { oss << "Rollback requested on inactive transaction"; });
         throw FirebirdException("Transaction is not active");
     }
@@ -112,11 +112,11 @@ void Transaction::Rollback() {
         transaction_ = nullptr;
         active_ = false;
 
-        util::trace(util::TraceLevel::info, "Transaction",
+        fbpp::util::trace(fbpp::util::TraceLevel::info, "Transaction",
                     [](auto& oss) { oss << "Transaction rolled back"; });
     }
     catch (const Firebird::FbException& e) {
-        util::trace(util::TraceLevel::error, "Transaction",
+        fbpp::util::trace(fbpp::util::TraceLevel::error, "Transaction",
                     [](auto& oss) { oss << "Rollback failed (Firebird exception)"; });
         throw FirebirdException(e);
     }
@@ -213,7 +213,7 @@ std::vector<uint8_t> Transaction::loadBlob(ISC_QUAD* blobId) {
         return data;
     }
     catch (const Firebird::FbException& e) {
-        util::trace(util::TraceLevel::error, "Transaction",
+        fbpp::util::trace(fbpp::util::TraceLevel::error, "Transaction",
                     [](auto& oss) { oss << "Failed to load BLOB (Firebird exception)"; });
         throw FirebirdException(e);
     }
@@ -254,7 +254,7 @@ ISC_QUAD Transaction::createBlob(const std::vector<uint8_t>& data) {
         return blobId;
     }
     catch (const Firebird::FbException& e) {
-        util::trace(util::TraceLevel::error, "Transaction",
+        fbpp::util::trace(fbpp::util::TraceLevel::error, "Transaction",
                     [](auto& oss) { oss << "Failed to create BLOB (Firebird exception)"; });
         throw FirebirdException(e);
     }

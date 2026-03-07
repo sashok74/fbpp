@@ -9,6 +9,8 @@ namespace fbpp {
 namespace core {
 
 namespace {
+    using PayloadKind = FirebirdStatusEntry::PayloadKind;
+
     // Map Firebird error codes to SQL state codes
     const std::unordered_map<int, std::string> ERROR_TO_SQLSTATE = {
         // Data exception
@@ -56,6 +58,34 @@ namespace {
         }
         return "HY000";  // General error
     }
+
+    FirebirdStatusEntry makeIntegerEntry(intptr_t tag, intptr_t value) {
+        FirebirdStatusEntry entry;
+        entry.tag = tag;
+        entry.payloadKind = PayloadKind::integer;
+        entry.numericValue = value;
+        return entry;
+    }
+
+    FirebirdStatusEntry makeTextEntry(intptr_t tag, const char* value) {
+        FirebirdStatusEntry entry;
+        entry.tag = tag;
+        entry.payloadKind = PayloadKind::text;
+        if (value) {
+            entry.textValue = value;
+        }
+        return entry;
+    }
+
+    FirebirdStatusEntry makeTextEntry(intptr_t tag, const char* value, size_t length) {
+        FirebirdStatusEntry entry;
+        entry.tag = tag;
+        entry.payloadKind = PayloadKind::text;
+        if (value) {
+            entry.textValue.assign(value, length);
+        }
+        return entry;
+    }
 }
 
 FirebirdException::FirebirdException(std::string message)
@@ -93,12 +123,19 @@ void FirebirdException::extractErrorDetails(Firebird::IStatus* status) {
     const intptr_t* errors = status->getErrors();
     if (!errors) return;
 
+    error_code_ = 0;
+    sql_state_.clear();
+    error_messages_.clear();
+    status_vector_.clear();
+    sql_code_ = static_cast<int>(isc_sqlcode(reinterpret_cast<const ISC_STATUS*>(errors)));
+
     size_t i = 0;
     while (errors[i] != isc_arg_end) {
         const intptr_t tag = errors[i++];
         switch (tag) {
             case isc_arg_gds: {
                 const intptr_t code = errors[i++];
+                status_vector_.push_back(makeIntegerEntry(tag, code));
                 if (error_code_ == 0) {
                     error_code_ = static_cast<int>(code);
                     // Map error code to SQL state if not already set
@@ -120,6 +157,7 @@ void FirebirdException::extractErrorDetails(Firebird::IStatus* status) {
             }
             case isc_arg_string: {
                 const char* s = reinterpret_cast<const char*>(errors[i++]);
+                status_vector_.push_back(makeTextEntry(tag, s));
                 if (s) {
                     if (!error_messages_.empty()) {
                         error_messages_.back() += " - ";
@@ -132,6 +170,7 @@ void FirebirdException::extractErrorDetails(Firebird::IStatus* status) {
             }
             case isc_arg_number: {
                 const intptr_t n = errors[i++];
+                status_vector_.push_back(makeIntegerEntry(tag, n));
                 if (!error_messages_.empty()) {
                     error_messages_.back() += " ";
                     error_messages_.back() += std::to_string(n);
@@ -140,27 +179,56 @@ void FirebirdException::extractErrorDetails(Firebird::IStatus* status) {
             }
             case isc_arg_sql_state: {
                 const char* st = reinterpret_cast<const char*>(errors[i++]);
+                status_vector_.push_back(makeTextEntry(tag, st));
                 if (st && sql_state_.empty()) sql_state_ = st;
                 break;
             }
             case isc_arg_interpreted: {
                 const char* s = reinterpret_cast<const char*>(errors[i++]);
+                status_vector_.push_back(makeTextEntry(tag, s));
                 if (s) error_messages_.emplace_back(s);
+                break;
+            }
+            case isc_arg_cstring: {
+                const auto length = static_cast<size_t>(errors[i++]);
+                const char* s = reinterpret_cast<const char*>(errors[i++]);
+                status_vector_.push_back(makeTextEntry(tag, s, length));
+                if (s) error_messages_.emplace_back(std::string(s, length));
                 break;
             }
             case isc_arg_warning: {
                 const intptr_t w = errors[i++];
+                status_vector_.push_back(makeIntegerEntry(tag, w));
                 std::stringstream ss;
                 ss << "Warning: " << w;
                 error_messages_.emplace_back(ss.str());
                 break;
             }
+#ifdef _WIN32
+            case isc_arg_win32: {
+                const intptr_t value = errors[i++];
+                status_vector_.push_back(makeIntegerEntry(tag, value));
+                break;
+            }
+#endif
+            case isc_arg_unix:
+            case isc_arg_vms: {
+                const intptr_t value = errors[i++];
+                status_vector_.push_back(makeIntegerEntry(tag, value));
+                break;
+            }
             default:
-                ++i; // skip payload conservatively
+                if (errors[i] != isc_arg_end) {
+                    status_vector_.push_back(makeIntegerEntry(tag, errors[i]));
+                    ++i; // skip payload conservatively
+                } else {
+                    FirebirdStatusEntry entry;
+                    entry.tag = tag;
+                    status_vector_.push_back(entry);
+                }
                 break;
         }
     }
-    sql_code_ = 0;
 
     // If we still don't have a SQL state, set default
     if (sql_state_.empty()) {

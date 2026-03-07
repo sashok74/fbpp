@@ -60,24 +60,24 @@ protected:
 };
 
 TEST_F(ConfigTest, LoadFromJson) {
-    ASSERT_TRUE(util::Config::load("test_config.json"));
+    ASSERT_TRUE(fbpp::util::Config::load("test_config.json"));
     
-    EXPECT_EQ(util::Config::db().server, "testserver");
-    EXPECT_EQ(util::Config::db().path, "/test/path.fdb");
-    EXPECT_EQ(util::Config::db().user, "testuser");
-    EXPECT_EQ(util::Config::db().password, "testpass");
-    EXPECT_EQ(util::Config::db().charset, "UTF8");
-    EXPECT_FALSE(util::Config::db().createIfMissing);
-    EXPECT_FALSE(util::Config::db().dropOnCleanup);
+    EXPECT_EQ(fbpp::util::Config::db().server, "testserver");
+    EXPECT_EQ(fbpp::util::Config::db().path, "/test/path.fdb");
+    EXPECT_EQ(fbpp::util::Config::db().user, "testuser");
+    EXPECT_EQ(fbpp::util::Config::db().password, "testpass");
+    EXPECT_EQ(fbpp::util::Config::db().charset, "UTF8");
+    EXPECT_FALSE(fbpp::util::Config::db().createIfMissing);
+    EXPECT_FALSE(fbpp::util::Config::db().dropOnCleanup);
     
-    EXPECT_EQ(util::Config::logging().level, "debug");
-    EXPECT_FALSE(util::Config::logging().console);
-    EXPECT_TRUE(util::Config::logging().file);
-    EXPECT_EQ(util::Config::logging().filePath, "test.log");
-    EXPECT_EQ(util::Config::logging().rotateMaxSizeMb, 10);
-    EXPECT_EQ(util::Config::logging().rotateMaxFiles, 5);
+    EXPECT_EQ(fbpp::util::Config::logging().level, "debug");
+    EXPECT_FALSE(fbpp::util::Config::logging().console);
+    EXPECT_TRUE(fbpp::util::Config::logging().file);
+    EXPECT_EQ(fbpp::util::Config::logging().filePath, "test.log");
+    EXPECT_EQ(fbpp::util::Config::logging().rotateMaxSizeMb, 10);
+    EXPECT_EQ(fbpp::util::Config::logging().rotateMaxFiles, 5);
     
-    EXPECT_TRUE(util::Config::tests().skipCreateSchema);
+    EXPECT_TRUE(fbpp::util::Config::tests().skipCreateSchema);
 }
 
 TEST_F(ConfigTest, EnvOverridesJson) {
@@ -85,15 +85,15 @@ TEST_F(ConfigTest, EnvOverridesJson) {
     setEnvVar("FBLAB_DB_PATH", "/env/path.fdb");
     setEnvVar("FBLAB_LOG_LEVEL", "info");
     
-    ASSERT_TRUE(util::Config::load("test_config.json"));
+    ASSERT_TRUE(fbpp::util::Config::load("test_config.json"));
     
-    EXPECT_EQ(util::Config::db().user, "envuser");
-    EXPECT_EQ(util::Config::db().path, "/env/path.fdb");
-    EXPECT_EQ(util::Config::logging().level, "info");
+    EXPECT_EQ(fbpp::util::Config::db().user, "envuser");
+    EXPECT_EQ(fbpp::util::Config::db().path, "/env/path.fdb");
+    EXPECT_EQ(fbpp::util::Config::logging().level, "info");
     
     // Values not overridden by env should remain from JSON
-    EXPECT_EQ(util::Config::db().server, "testserver");
-    EXPECT_EQ(util::Config::db().password, "testpass");
+    EXPECT_EQ(fbpp::util::Config::db().server, "testserver");
+    EXPECT_EQ(fbpp::util::Config::db().password, "testpass");
     
     unsetEnvVar("FBLAB_DB_USER");
     unsetEnvVar("FBLAB_DB_PATH");

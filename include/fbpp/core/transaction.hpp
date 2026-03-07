@@ -15,6 +15,14 @@ class Statement;
 class ResultSet;
 class Batch;
 
+/**
+ * Transaction handle bound to a single Connection attachment.
+ *
+ * Thread-safety contract:
+ * - Transaction is not safe for concurrent use.
+ * - Keep the transaction on the same thread as the owning Connection and any
+ *   Statements / ResultSets opened from it.
+ */
 class Transaction : public std::enable_shared_from_this<Transaction> {
 public:
     // Constructor

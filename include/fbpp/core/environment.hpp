@@ -7,7 +7,13 @@ namespace fbpp {
 namespace core {
 
 /**
- * Environment singleton - manages global Firebird interfaces (master, provider, util)
+ * Process-wide immutable Firebird interface holder.
+ *
+ * Thread-safety contract:
+ * - Construction uses C++ local-static initialization and is safe to race.
+ * - After initialization the object is immutable and may be read concurrently.
+ * - This singleton intentionally models process-wide Firebird interfaces, not a
+ *   per-connection or per-library-instance sandbox.
  */
 class Environment {
 public:

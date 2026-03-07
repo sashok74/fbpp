@@ -35,17 +35,20 @@ target_compile_features(cppdecimal PUBLIC cxx_std_17)
 # Install headers
 install(DIRECTORY include/
     DESTINATION include/cppdecimal
+    COMPONENT core
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hh"
 )
 
 # Install main decimal header
 install(FILES include/decimal
     DESTINATION include/cppdecimal
+    COMPONENT core
 )
 
 # Install library
 install(TARGETS cppdecimal
-    EXPORT fbppTargets
+    EXPORT fbppCoreTargets
+    COMPONENT core
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
@@ -55,4 +58,5 @@ install(TARGETS cppdecimal
 # Install license
 install(FILES LICENSE
     DESTINATION share/licenses/cppdecimal
+    COMPONENT core
 )

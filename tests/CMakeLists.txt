@@ -1,4 +1,5 @@
 include(GoogleTest)
+find_program(FBPP_CTEST_EXECUTABLE NAMES ctest REQUIRED)
 
 add_compile_definitions(FBPP_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test_data")
 
@@ -643,3 +644,40 @@ target_link_libraries(test_extended_types_conversion PRIVATE
 )
 
 gtest_discover_tests(test_extended_types_conversion)
+
+function(fbpp_add_package_smoke_test test_name consumer_source_dir)
+    set(consumer_binary_dir "${CMAKE_BINARY_DIR}/package_smoke/${test_name}/build")
+    set(install_prefix "${CMAKE_BINARY_DIR}/package_smoke/${test_name}/install")
+    if(CMAKE_CONFIGURATION_TYPES)
+        set(fbpp_parent_multi_config TRUE)
+    else()
+        set(fbpp_parent_multi_config FALSE)
+    endif()
+
+    add_test(
+        NAME ${test_name}
+        COMMAND ${CMAKE_COMMAND}
+            -DFBPP_PARENT_BINARY_DIR=${CMAKE_BINARY_DIR}
+            -DFBPP_PARENT_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+            -DFBPP_PARENT_GENERATOR=${CMAKE_GENERATOR}
+            -DFBPP_PARENT_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
+            -DFBPP_PARENT_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
+            -DFBPP_PARENT_MULTI_CONFIG=${fbpp_parent_multi_config}
+            -DFBPP_PARENT_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+            -DFBPP_CTEST_COMMAND=${FBPP_CTEST_EXECUTABLE}
+            -DFBPP_CONSUMER_SOURCE_DIR=${consumer_source_dir}
+            -DFBPP_CONSUMER_BINARY_DIR=${consumer_binary_dir}
+            -DFBPP_INSTALL_PREFIX=${install_prefix}
+            -P ${CMAKE_SOURCE_DIR}/cmake/fbppPackageSmokeTest.cmake
+    )
+endfunction()
+
+fbpp_add_package_smoke_test(package_smoke_core
+    ${CMAKE_CURRENT_SOURCE_DIR}/package_smoke/core
+)
+
+fbpp_add_package_smoke_test(package_smoke_codegen
+    ${CMAKE_CURRENT_SOURCE_DIR}/package_smoke/codegen
+)
+
+set_tests_properties(package_smoke_core package_smoke_codegen PROPERTIES RUN_SERIAL TRUE)

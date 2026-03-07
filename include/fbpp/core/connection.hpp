@@ -43,8 +43,15 @@ enum class CancelOperation : int {
 };
 
 /**
- * Connection owns its own IStatus/ThrowStatusWrapper.
- * Assumption: one connection is used from one thread.
+ * Firebird attachment wrapper with explicit per-connection runtime options.
+ *
+ * Thread-safety contract:
+ * - Connection is not internally synchronized for concurrent use.
+ * - Treat one Connection instance as thread-affine: use it from one thread at
+ *   a time, and keep its Statement / Transaction / ResultSet objects on the
+ *   same thread as the owning connection.
+ * - Environment remains process-wide, but runtime behavior such as statement
+ *   caching is configured per Connection via ConnectionOptions.
  */
 class Connection {
 public:
@@ -125,7 +132,7 @@ private:
 
     Firebird::IAttachment* attachment_ = nullptr;
     Environment& env_;
-    // Each connection owns its status
+    // Each connection owns its status wrapper and keeps it thread-local by contract.
     Firebird::IStatus* status_;                    // created from master, disposed in destructor
     mutable Firebird::ThrowStatusWrapper statusWrapper_{nullptr};
     ConnectionOptions options_{};

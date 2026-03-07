@@ -29,6 +29,11 @@ struct StatementCacheConfig {
  *
  * Provides caching mechanism for prepared statements to avoid
  * repeated preparation overhead. Uses LRU eviction policy.
+ *
+ * Thread-safety contract:
+ * - Cache bookkeeping is protected by an internal mutex.
+ * - Cached Statement instances remain bound to the owning Connection and are
+ *   not safe to execute concurrently from multiple threads.
  */
 class StatementCache {
 public:

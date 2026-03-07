@@ -13,7 +13,7 @@
 
 namespace fs = std::filesystem;
 
-namespace util {
+namespace fbpp::util {
 
 std::vector<fs::path> ConfigLoader::customPaths_;
 
@@ -99,4 +99,4 @@ void ConfigLoader::addSearchPath(const fs::path& path) {
     customPaths_.push_back(path);
 }
 
-} // namespace util
+} // namespace fbpp::util

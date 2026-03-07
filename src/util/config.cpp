@@ -2,7 +2,7 @@
 #include <fstream>
 #include <cstdlib>
 
-namespace util {
+namespace fbpp::util {
 
 Config& Config::instance() {
     static Config cfg;
@@ -80,4 +80,4 @@ void Config::loadFromEnv() {
     }
 }
 
-}  // namespace util
+}  // namespace fbpp::util

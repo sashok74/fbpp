@@ -3,7 +3,7 @@
 #include <string>
 #include <nlohmann/json.hpp>
 
-namespace util {
+namespace fbpp::util {
 
 class Config {
 public:
@@ -57,4 +57,4 @@ private:
     CacheConfig cache_;
 };
 
-}  // namespace util
+}  // namespace fbpp::util

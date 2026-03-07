@@ -29,8 +29,8 @@
 ## 3. Включение в сторонний проект (общие шаги для LLM)
 
 1. **Подтянуть драйвер**:
-   - Вариант *submodule*: `add_subdirectory(fbpp)` и `target_link_libraries(<app> PRIVATE fbpp)`.
-   - Вариант *установленной библиотеки*: использовать `find_package(fbpp CONFIG REQUIRED)` (после `cmake --install` оригинального проекта).
+   - Вариант *submodule*: `add_subdirectory(fbpp)` и `target_link_libraries(<app> PRIVATE fbpp::fbpp_core)`.
+   - Вариант *установленной библиотеки*: использовать `find_package(fbpp CONFIG REQUIRED COMPONENTS core)` (после `cmake --install` оригинального проекта).
 2. **Настроить Firebird**:
    - Указать `ConnectionParams` (`hostname:path`, `SYSDBA`, пароль, `UTF8`).
    - Подготовить `config/test_config.json` либо напрямую инициализировать `ConnectionParams`.
@@ -114,7 +114,7 @@ auto rows = executeQuery<QueryDescriptor<QueryId::TABLE_TEST_1_S>>(conn, *tra, s
   2. Настроить пути к заголовкам: `include\fbpp`, `generated\...`.
   3. При работе в UI‑потоке оборачивать длительные операции в `TTask::Run` или `std::jthread`, чтобы не блокировать интерфейс.
   4. Использовать RAII‑классы (Connection/Transaction) в рамках отдельного класса‑сервиса и дергать его из формы.
-  5. Для логов – направить вывод в `OutputDebugString` или файл (через `util::Logging::init("info", true, true, "logs/fbpp_ui.log")`).
+  5. Для логов – подключить собственный `fbpp::util::TraceSink` и направить сообщения в `OutputDebugString`, файл или другой backend.
 
 ## 6. Типовая инструкция для LLM (вкладывать в промпт)
 

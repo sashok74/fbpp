@@ -4,7 +4,7 @@
 #include <vector>
 #include <filesystem>
 
-namespace util {
+namespace fbpp::util {
 
 /**
  * Configuration file loader with multiple search paths
@@ -42,4 +42,4 @@ private:
     static std::vector<std::filesystem::path> customPaths_;
 };
 
-} // namespace util
+} // namespace fbpp::util

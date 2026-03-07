@@ -1,5 +1,19 @@
 #pragma once
 
+/**
+ * @file fbpp.hpp
+ * @brief Stable minimal umbrella header for the fbpp runtime layer.
+ *
+ * Supported public umbrella headers:
+ * - <fbpp/fbpp.hpp> for the minimal runtime API
+ * - <fbpp/fbpp_extended.hpp> for core + extended Firebird value types
+ * - <fbpp/fbpp_all.hpp> for the convenience surface with adapters and helpers
+ *
+ * Advanced direct includes under <fbpp/core/...> and <fbpp/adapters/...> are
+ * supported public headers. Headers under <fbpp/core/detail/...> and
+ * implementation helpers such as *_impl.hpp are not stable entry points.
+ */
+
 // Version information
 #define FBPP_VERSION_MAJOR 1
 #define FBPP_VERSION_MINOR 0
@@ -15,8 +29,3 @@
 
 // Template implementations (must be after statement.hpp)
 #include "fbpp/core/transaction_impl.hpp"
-
-// Convenience namespace
-namespace fbpp {
-    using namespace fbpp::core;
-}

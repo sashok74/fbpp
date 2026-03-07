@@ -2,13 +2,40 @@
 
 include(CMakeFindDependencyMacro)
 
+set(fbpp_SUPPORTED_COMPONENTS core codegen)
+if(NOT fbpp_FIND_COMPONENTS)
+    set(fbpp_FIND_COMPONENTS core codegen)
+endif()
+
+foreach(_fbpp_component IN LISTS fbpp_FIND_COMPONENTS)
+    if(NOT _fbpp_component IN_LIST fbpp_SUPPORTED_COMPONENTS)
+        set(fbpp_FOUND FALSE)
+        set(fbpp_NOT_FOUND_MESSAGE
+            "Unsupported fbpp component: ${_fbpp_component}. Supported components: ${fbpp_SUPPORTED_COMPONENTS}"
+        )
+        return()
+    endif()
+endforeach()
+
 # Find required dependencies
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
 find_dependency(Firebird REQUIRED)
 find_dependency(nlohmann_json REQUIRED)
 
-# Include the targets file
-include("${CMAKE_CURRENT_LIST_DIR}/fbppTargets.cmake")
+set(_fbpp_need_core FALSE)
+if("core" IN_LIST fbpp_FIND_COMPONENTS OR "codegen" IN_LIST fbpp_FIND_COMPONENTS)
+    set(_fbpp_need_core TRUE)
+endif()
+
+if(_fbpp_need_core)
+    include("${CMAKE_CURRENT_LIST_DIR}/fbppCoreTargets.cmake")
+    set(fbpp_core_FOUND TRUE)
+endif()
+
+if("codegen" IN_LIST fbpp_FIND_COMPONENTS)
+    include("${CMAKE_CURRENT_LIST_DIR}/fbppCodegenTargets.cmake")
+    set(fbpp_codegen_FOUND TRUE)
+endif()
 
 if(NOT TARGET fbpp::fbpp AND TARGET fbpp::fbpp_core)
     add_library(fbpp::fbpp INTERFACE IMPORTED)
@@ -17,17 +44,19 @@ if(NOT TARGET fbpp::fbpp AND TARGET fbpp::fbpp_core)
     )
 endif()
 
-set_property(TARGET fbpp::fbpp_core APPEND PROPERTY
-    INTERFACE_LINK_LIBRARIES Firebird::Firebird
-)
-
-get_target_property(_fbpp_firebird_include_dirs Firebird::Firebird INTERFACE_INCLUDE_DIRECTORIES)
-if(_fbpp_firebird_include_dirs)
+if(TARGET fbpp::fbpp_core)
     set_property(TARGET fbpp::fbpp_core APPEND PROPERTY
-        INTERFACE_INCLUDE_DIRECTORIES "${_fbpp_firebird_include_dirs}"
+        INTERFACE_LINK_LIBRARIES Firebird::Firebird
     )
+
+    get_target_property(_fbpp_firebird_include_dirs Firebird::Firebird INTERFACE_INCLUDE_DIRECTORIES)
+    if(_fbpp_firebird_include_dirs)
+        set_property(TARGET fbpp::fbpp_core APPEND PROPERTY
+            INTERFACE_INCLUDE_DIRECTORIES "${_fbpp_firebird_include_dirs}"
+        )
+    endif()
+    unset(_fbpp_firebird_include_dirs)
 endif()
-unset(_fbpp_firebird_include_dirs)
 
 # Provide variables for compatibility
 set_and_check(fbpp_INCLUDE_DIRS "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")

@@ -5,6 +5,7 @@
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/statement_cache.hpp"
 #include "fbpp/core/result_set.hpp"
+#include <atomic>
 #include <thread>
 #include <chrono>
 
@@ -245,14 +246,25 @@ TEST_F(CachedStatementsTest, SQLNormalizationWithStrings) {
     EXPECT_EQ(stats.cacheSize, 2);   // Two different entries
 }
 
-// Test concurrent access to cache
-TEST_F(CachedStatementsTest, ConcurrentCacheAccess) {
+// Test supported parallel usage: one connection (and one cache) per thread.
+TEST_F(CachedStatementsTest, ParallelConnectionsCanUseCachesIndependently) {
     const int numThreads = 10;
     const int opsPerThread = 5;
     std::vector<std::thread> threads;
+    std::atomic<size_t> totalHits{0};
+    std::atomic<size_t> totalMisses{0};
+    std::atomic<size_t> totalCacheSize{0};
+    std::atomic<size_t> nullStatements{0};
 
     for (int t = 0; t < numThreads; ++t) {
-        threads.emplace_back([this, t, opsPerThread]() {
+        threads.emplace_back([this, opsPerThread, &totalHits, &totalMisses, &totalCacheSize, &nullStatements]() {
+            ConnectionParams params = db_params_;
+            params.options.statementCache.enabled = true;
+            params.options.statementCache.maxSize = 10;
+            params.options.statementCache.ttlMinutes = 60;
+
+            Connection localConnection(params);
+
             for (int i = 0; i < opsPerThread; ++i) {
                 // Mix of different queries
                 std::string sql;
@@ -264,12 +276,19 @@ TEST_F(CachedStatementsTest, ConcurrentCacheAccess) {
                     sql = "INSERT INTO test_cached (id, name) VALUES (?, ?)";
                 }
 
-                auto stmt = connection_->prepareStatement(sql);
-                ASSERT_NE(stmt, nullptr);
+                auto stmt = localConnection.prepareStatement(sql);
+                if (!stmt) {
+                    nullStatements.fetch_add(1, std::memory_order_relaxed);
+                }
 
                 // Small delay to increase chance of contention
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
+
+            const auto stats = localConnection.getCacheStatistics();
+            totalHits.fetch_add(stats.hitCount, std::memory_order_relaxed);
+            totalMisses.fetch_add(stats.missCount, std::memory_order_relaxed);
+            totalCacheSize.fetch_add(stats.cacheSize, std::memory_order_relaxed);
         });
     }
 
@@ -278,13 +297,11 @@ TEST_F(CachedStatementsTest, ConcurrentCacheAccess) {
         thread.join();
     }
 
-    // Check final state
-    auto stats = connection_->getCacheStatistics();
-    EXPECT_EQ(stats.cacheSize, 3);  // Three unique queries
-
-    // Total accesses should be numThreads * opsPerThread
-    size_t totalAccesses = stats.hitCount + stats.missCount;
-    EXPECT_EQ(totalAccesses, numThreads * opsPerThread);
+    EXPECT_EQ(nullStatements.load(std::memory_order_relaxed), 0u);
+    EXPECT_EQ(totalCacheSize.load(std::memory_order_relaxed), static_cast<size_t>(numThreads * 3));
+    EXPECT_EQ(totalMisses.load(std::memory_order_relaxed), static_cast<size_t>(numThreads * 3));
+    EXPECT_EQ(totalHits.load(std::memory_order_relaxed),
+              static_cast<size_t>(numThreads * (opsPerThread - 3)));
 }
 
 // Test cache hit rate

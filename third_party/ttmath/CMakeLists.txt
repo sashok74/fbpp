@@ -19,11 +19,13 @@ install(DIRECTORY ttmath/
 )
 
 install(TARGETS ttmath
-    EXPORT fbppTargets
+    EXPORT fbppCoreTargets
+    COMPONENT core
     INCLUDES DESTINATION include
 )
 
 # Install license
 install(FILES LICENSE
     DESTINATION share/licenses/ttmath
+    COMPONENT core
 )

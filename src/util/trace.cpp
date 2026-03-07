@@ -2,7 +2,7 @@
 
 #include <atomic>
 
-namespace util {
+namespace fbpp::util {
 namespace {
 std::atomic<TraceSink*> g_traceSink{nullptr};
 } // namespace
@@ -23,5 +23,5 @@ void traceMessage(TraceLevel level,
     }
 }
 
-} // namespace util
+} // namespace fbpp::util
 

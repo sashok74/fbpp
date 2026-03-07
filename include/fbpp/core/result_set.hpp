@@ -21,6 +21,11 @@ class Transaction;
  * 
  * Provides cursor functionality for fetching rows from SELECT statements
  * Simplified API with only template methods for fetching data
+ *
+ * Thread-safety contract:
+ * - ResultSet models a sequential Firebird cursor and is not thread-safe.
+ * - Consume it from the same thread as the Transaction / Statement that
+ *   produced it.
  */
 class ResultSet {
 public:

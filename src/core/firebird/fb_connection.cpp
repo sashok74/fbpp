@@ -34,7 +34,7 @@ Connection::~Connection() {
 }
 
 void Connection::connect(const ConnectionParams& params) {
-    util::trace(util::TraceLevel::info, "Connection",
+    fbpp::util::trace(fbpp::util::TraceLevel::info, "Connection",
                 [&](auto& oss) { oss << "Connecting to " << params.database; });
     try {
         auto& st = status();
@@ -74,16 +74,16 @@ void Connection::connect(const ConnectionParams& params) {
         dpb->dispose();
 
         if (!attachment_) {
-            util::trace(util::TraceLevel::error, "Connection",
+            fbpp::util::trace(fbpp::util::TraceLevel::error, "Connection",
                         [&](auto& oss) { oss << "Failed to attach to " << params.database; });
             throw FirebirdException("Failed to attach to database: " + params.database);
         }
 
-        util::trace(util::TraceLevel::info, "Connection",
+        fbpp::util::trace(fbpp::util::TraceLevel::info, "Connection",
                     [&](auto& oss) { oss << "Connected to " << params.database; });
     }
     catch (const Firebird::FbException& e) {
-        util::trace(util::TraceLevel::error, "Connection",
+        fbpp::util::trace(fbpp::util::TraceLevel::error, "Connection",
                     [&](auto& oss) {
                         oss << "Connection to " << params.database << " failed (Firebird exception)";
                     });
@@ -97,11 +97,11 @@ void Connection::disconnect() {
             auto& st = status();
             attachment_->detach(&st);
             attachment_->release();
-            util::trace(util::TraceLevel::info, "Connection",
+            fbpp::util::trace(fbpp::util::TraceLevel::info, "Connection",
                         [](auto& oss) { oss << "Disconnected from database"; });
         }
         catch (...) {
-            util::trace(util::TraceLevel::warn, "Connection",
+            fbpp::util::trace(fbpp::util::TraceLevel::warn, "Connection",
                         [](auto& oss) { oss << "Error while disconnecting (ignored)"; });
             // Ignore errors during disconnect
         }
@@ -111,7 +111,7 @@ void Connection::disconnect() {
 
 std::shared_ptr<Transaction> Connection::Execute(const std::string& sql) {
     if (!attachment_) {
-        util::trace(util::TraceLevel::error, "Connection",
+        fbpp::util::trace(fbpp::util::TraceLevel::error, "Connection",
                     [&](auto& oss) {
                         oss << "Cannot execute SQL (not connected): "
                             << sql.substr(0, 100);
@@ -134,7 +134,7 @@ std::shared_ptr<Transaction> Connection::Execute(const std::string& sql) {
 
         if (!stmt) {
             // Statement preparation failed
-            util::trace(util::TraceLevel::error, "Connection",
+            fbpp::util::trace(fbpp::util::TraceLevel::error, "Connection",
                         [&](auto& oss) {
                             oss << "Failed to prepare SQL statement: "
                                 << sql.substr(0, 100);
@@ -246,7 +246,7 @@ void Connection::cancelOperation(CancelOperation option) {
             optionName = "ABORT";
             break;
     }
-    util::trace(util::TraceLevel::info, "Connection",
+    fbpp::util::trace(fbpp::util::TraceLevel::info, "Connection",
                 [&](auto& oss) {
                     oss << "cancelOperation(" << (optionName ? optionName : "UNKNOWN") << ")";
                 });

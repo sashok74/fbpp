@@ -30,6 +30,13 @@ class Batch;
  * - Cursor operations for SELECT statements
  * - Batch operations (Firebird 4.0+)
  * - Metadata inspection
+ *
+ * Thread-safety contract:
+ * - Statement is bound to the Connection that created it.
+ * - Statement instances are not safe for concurrent execution from multiple
+ *   threads.
+ * - Cached statements inherit the same thread-affinity as their owning
+ *   Connection even though StatementCache protects its own bookkeeping.
  */
 class Statement {
     // Transaction needs access to execute methods

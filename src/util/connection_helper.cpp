@@ -32,7 +32,7 @@ json loadConfig() {
     return config;
 }
 
-ConnectionParams getConnectionParams(const std::string& section) {
+fbpp::core::ConnectionParams getConnectionParams(const std::string& section) {
     auto config = loadConfig();
 
     json dbConfig;
@@ -77,7 +77,7 @@ ConnectionParams getConnectionParams(const std::string& section) {
         charset = envCharset;
     }
 
-    ConnectionParams params;
+    fbpp::core::ConnectionParams params;
     params.database = server + ":" + path;
     params.user = user;
     params.password = password;
