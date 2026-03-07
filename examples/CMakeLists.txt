@@ -30,7 +30,8 @@ foreach(example_src ${EXAMPLE_SOURCES})
     )
 
     set(example_libs
-        fbpp
+        fbpp_core
+        fbpp_test_support
         ${FIREBIRD_LIBRARIES}
         nlohmann_json::nlohmann_json
         ttmath

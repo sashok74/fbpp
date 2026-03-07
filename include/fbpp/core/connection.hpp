@@ -20,6 +20,10 @@ class Statement;
 class ResultSet;
 class StatementCache;
 
+struct ConnectionOptions {
+    StatementCacheConfig statementCache;
+};
+
 struct ConnectionParams {
     std::string database;
     std::string user = "SYSDBA";
@@ -27,6 +31,7 @@ struct ConnectionParams {
     std::string charset = "UTF8";
     std::string role;
     int sql_dialect = 3;  // SQL dialect (1, 2, or 3). Default: 3 (modern dialect)
+    ConnectionOptions options;
 };
 
 // Cancel operation options (from Firebird's consts_pub.h)
@@ -80,6 +85,14 @@ public:
     // Get cache statistics
     StatementCache::Statistics getCacheStatistics() const;
 
+    // Configure runtime connection behavior
+    void setOptions(const ConnectionOptions& options);
+    const ConnectionOptions& getOptions() const { return options_; }
+    void setStatementCacheConfig(const StatementCacheConfig& config);
+    const StatementCacheConfig& getStatementCacheConfig() const {
+        return options_.statementCache;
+    }
+
     // Check if connected
     bool isConnected() const;
 
@@ -115,6 +128,7 @@ private:
     // Each connection owns its status
     Firebird::IStatus* status_;                    // created from master, disposed in destructor
     mutable Firebird::ThrowStatusWrapper statusWrapper_{nullptr};
+    ConnectionOptions options_{};
 
     // Statement cache (lazy initialized)
     mutable std::unique_ptr<StatementCache> statementCache_;

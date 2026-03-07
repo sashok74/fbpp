@@ -138,6 +138,12 @@ public:
     void setMaxSize(size_t maxSize);
 
     /**
+     * @brief Set time-to-live for unused statements
+     * @param ttlMinutes New TTL in minutes (0 disables expiration)
+     */
+    void setTtlMinutes(size_t ttlMinutes);
+
+    /**
      * @brief Remove expired statements based on TTL
      * @return Number of statements removed
      */

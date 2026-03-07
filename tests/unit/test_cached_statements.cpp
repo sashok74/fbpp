@@ -5,7 +5,6 @@
 #include "fbpp/core/transaction.hpp"
 #include "fbpp/core/statement_cache.hpp"
 #include "fbpp/core/result_set.hpp"
-#include "fbpp_util/config.h"
 #include <thread>
 #include <chrono>
 
@@ -18,9 +17,11 @@ protected:
     void SetUp() override {
         TempDatabaseTest::SetUp();
 
-        util::Config::cache().enabled = true;
-        util::Config::cache().maxStatements = 10;
-        util::Config::cache().ttlMinutes = 60;
+        StatementCacheConfig cacheConfig;
+        cacheConfig.enabled = true;
+        cacheConfig.maxSize = 10;
+        cacheConfig.ttlMinutes = 60;
+        connection_->setStatementCacheConfig(cacheConfig);
     }
 
     void createTestSchema() override {
@@ -55,6 +56,28 @@ TEST_F(CachedStatementsTest, BasicCachedStatement) {
     EXPECT_EQ(stats.cacheSize, 1);
     EXPECT_EQ(stats.hitCount, 1);  // Second call was a hit
     EXPECT_EQ(stats.missCount, 1); // First call was a miss
+}
+
+TEST_F(CachedStatementsTest, ConnectionParamsCanDisableCache) {
+    ConnectionParams params = db_params_;
+    params.options.statementCache.enabled = false;
+    params.options.statementCache.maxSize = 10;
+    params.options.statementCache.ttlMinutes = 60;
+
+    Connection directConnection(params);
+    const std::string sql = "SELECT * FROM test_cached WHERE id = ?";
+
+    auto stmt1 = directConnection.prepareStatement(sql);
+    auto stmt2 = directConnection.prepareStatement(sql);
+
+    ASSERT_NE(stmt1, nullptr);
+    ASSERT_NE(stmt2, nullptr);
+    EXPECT_NE(stmt1.get(), stmt2.get());
+
+    auto stats = directConnection.getCacheStatistics();
+    EXPECT_EQ(stats.cacheSize, 0);
+    EXPECT_EQ(stats.hitCount, 0);
+    EXPECT_EQ(stats.missCount, 0);
 }
 
 // Test cache with different SQL queries

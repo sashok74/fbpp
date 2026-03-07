@@ -228,8 +228,10 @@ void StatementCache::setEnabled(bool enabled) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (!enabled && config_.enabled) {
-        // Disabling cache - clear all entries
-        clear();
+        cache_.clear();
+        lruList_.clear();
+        lruMap_.clear();
+        stats_.cacheSize = 0;
     }
 
     config_.enabled = enabled;
@@ -249,6 +251,13 @@ void StatementCache::setMaxSize(size_t maxSize) {
 
     util::trace(util::TraceLevel::info, "StatementCache",
                 [&](auto& oss) { oss << "Cache max size set to " << maxSize; });
+}
+
+void StatementCache::setTtlMinutes(size_t ttlMinutes) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    config_.ttlMinutes = ttlMinutes;
+    util::trace(util::TraceLevel::info, "StatementCache",
+                [&](auto& oss) { oss << "Cache TTL set to " << ttlMinutes << " minutes"; });
 }
 
 size_t StatementCache::removeExpired() {

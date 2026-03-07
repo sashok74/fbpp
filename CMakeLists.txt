@@ -20,10 +20,23 @@ message(STATUS "Firebird library: ${FIREBIRD_LIBRARIES}")
 add_subdirectory(third_party/ttmath)
 add_subdirectory(third_party/cppdecimal)
 
+function(fbpp_configure_cxx_target target_name)
+    target_compile_features(${target_name} PUBLIC cxx_std_20)
+    set_target_properties(${target_name} PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
 
-# Main fbpp library
-add_library(fbpp STATIC
-    # Core components
+    if(MSVC)
+        target_compile_options(${target_name} PRIVATE /wd4100)
+    else()
+        target_compile_options(${target_name} PRIVATE -Wno-unused-parameter)
+    endif()
+endfunction()
+
+# Runtime wrapper
+add_library(fbpp_core STATIC
     src/core/firebird/fb_connection.cpp
     src/core/firebird/fb_transaction.cpp
     src/core/firebird/fb_statement.cpp
@@ -35,29 +48,17 @@ add_library(fbpp STATIC
     src/core/firebird/fb_exception.cpp
     src/core/firebird/fb_extended_types.cpp
     src/core/firebird/fb_batch.cpp
-    src/core/firebird/query_generator_service.cpp
 
-    # Utilities
     src/util/trace.cpp
-    src/util/config.cpp
-    src/util/config_loader.cpp
 )
 
-# Configure fbpp library
-target_compile_features(fbpp PUBLIC cxx_std_20)
-# Explicitly set C++20 for all compilers
-set_target_properties(fbpp PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
-)
-target_include_directories(fbpp PUBLIC
+target_include_directories(fbpp_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${FIREBIRD_INCLUDE_DIRS}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-target_link_libraries(fbpp
+target_link_libraries(fbpp_core
     PUBLIC
         $<BUILD_INTERFACE:Firebird::Firebird>
         nlohmann_json::nlohmann_json
@@ -65,15 +66,52 @@ target_link_libraries(fbpp
         cppdecimal
 )
 
-target_compile_features(fbpp PUBLIC cxx_std_20)
-if(MSVC)
-    target_compile_options(fbpp PRIVATE /wd4100)
-else()
-    target_compile_options(fbpp PRIVATE -Wno-unused-parameter)
-endif()
+fbpp_configure_cxx_target(fbpp_core)
 
-# Create alias for modern CMake usage
-add_library(fbpp::fbpp ALIAS fbpp)
+# Code generation helpers built on top of the runtime layer
+add_library(fbpp_codegen STATIC
+    src/core/firebird/query_generator_service.cpp
+)
+
+target_include_directories(fbpp_codegen PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${FIREBIRD_INCLUDE_DIRS}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+target_link_libraries(fbpp_codegen
+    PUBLIC
+        fbpp_core
+)
+
+fbpp_configure_cxx_target(fbpp_codegen)
+
+# Internal helpers for examples and tests
+add_library(fbpp_test_support STATIC
+    src/util/connection_helper.cpp
+    src/util/config.cpp
+    src/util/config_loader.cpp
+)
+
+target_include_directories(fbpp_test_support PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${FIREBIRD_INCLUDE_DIRS}>
+)
+
+target_link_libraries(fbpp_test_support
+    PUBLIC
+        fbpp_core
+        nlohmann_json::nlohmann_json
+)
+
+fbpp_configure_cxx_target(fbpp_test_support)
+
+# Create aliases for modern CMake usage and local compatibility
+add_library(fbpp ALIAS fbpp_core)
+add_library(fbpp::fbpp ALIAS fbpp_core)
+add_library(fbpp::fbpp_core ALIAS fbpp_core)
+add_library(fbpp::fbpp_codegen ALIAS fbpp_codegen)
+add_library(fbpp::fbpp_test_support ALIAS fbpp_test_support)
 
 # Query generator tool
 add_executable(query_generator
@@ -81,11 +119,11 @@ add_executable(query_generator
 )
 
 target_link_libraries(query_generator PRIVATE
-    fbpp
+    fbpp_codegen
     nlohmann_json::nlohmann_json
 )
 
-target_compile_features(query_generator PRIVATE cxx_std_20)
+fbpp_configure_cxx_target(query_generator)
 
 
 # Исключаем примеры из сборки по умолчанию
@@ -116,8 +154,8 @@ endif()
 # Installation rules
 include(GNUInstallDirs)
 
-# Install fbpp library
-install(TARGETS fbpp
+# Install exported libraries
+install(TARGETS fbpp_core fbpp_codegen
     EXPORT fbppTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -131,9 +169,9 @@ install(DIRECTORY include/fbpp
     FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
 )
 
-install(DIRECTORY include/fbpp_util
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
+install(FILES
+    include/fbpp_util/trace.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fbpp_util
 )
 
 # Install main convenience headers

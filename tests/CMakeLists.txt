@@ -8,7 +8,8 @@ add_executable(test_query_generator_runner
 )
 
 target_link_libraries(test_query_generator_runner PRIVATE
-    fbpp
+    fbpp_codegen
+    fbpp_test_support
     GTest::gtest
     nlohmann_json::nlohmann_json
     ${FIREBIRD_LIBRARIES}
@@ -44,6 +45,7 @@ add_executable(test_core_wrapper
 
 target_link_libraries(test_core_wrapper PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -60,6 +62,7 @@ add_executable(test_statement
 
 target_link_libraries(test_statement PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -76,6 +79,7 @@ add_executable(test_firebird_exception
 
 target_link_libraries(test_firebird_exception PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -92,6 +96,7 @@ add_executable(test_statement_cache
 
 target_link_libraries(test_statement_cache PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -108,6 +113,7 @@ add_executable(test_cached_statements
 
 target_link_libraries(test_cached_statements PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -200,6 +206,7 @@ add_executable(test_named_parameters
 
 target_link_libraries(test_named_parameters PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -216,6 +223,7 @@ add_executable(test_query_metadata
 
 target_link_libraries(test_query_metadata PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -232,6 +240,7 @@ add_executable(test_struct_pack
 
 target_link_libraries(test_struct_pack PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -248,6 +257,7 @@ add_executable(test_query_generator
 
 target_link_libraries(test_query_generator PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -267,6 +277,7 @@ add_executable(test_query_generator_integration
 
 target_link_libraries(test_query_generator_integration PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -287,6 +298,7 @@ add_executable(test_cancel_operation
 
 target_link_libraries(test_cancel_operation PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -313,10 +325,23 @@ gtest_discover_tests(test_struct_descriptor)
 # Basic infrastructure tests
 set(BASIC_TEST_SOURCES
     unit/test_trace.cpp
-    unit/test_config.cpp
     unit/test_fbclient_symbols.cpp
     unit/test_timestamp_utils.cpp
 )
+
+add_executable(test_config
+    unit/test_config.cpp
+)
+
+target_link_libraries(test_config PRIVATE
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_config)
 
 foreach(test_source ${BASIC_TEST_SOURCES})
     get_filename_component(test_name ${test_source} NAME_WE)
@@ -380,6 +405,7 @@ target_include_directories(test_query_generator_ttmath PRIVATE ${CMAKE_BINARY_DI
 
 target_link_libraries(test_query_generator_ttmath PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -449,6 +475,7 @@ target_include_directories(test_query_generator_decfloat PRIVATE ${CMAKE_BINARY_
 
 target_link_libraries(test_query_generator_decfloat PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -518,6 +545,7 @@ target_include_directories(test_query_generator_datetime PRIVATE ${CMAKE_BINARY_
 
 target_link_libraries(test_query_generator_datetime PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -590,6 +618,7 @@ target_include_directories(test_query_generator_combined PRIVATE ${CMAKE_BINARY_
 
 target_link_libraries(test_query_generator_combined PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json
@@ -606,6 +635,7 @@ add_executable(test_extended_types_conversion
 
 target_link_libraries(test_extended_types_conversion PRIVATE
     fbpp
+    fbpp_test_support
     GTest::gtest
     GTest::gtest_main
     nlohmann_json::nlohmann_json

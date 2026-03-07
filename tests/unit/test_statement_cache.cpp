@@ -4,7 +4,6 @@
 #include "fbpp/core/connection.hpp"
 #include "fbpp/core/statement.hpp"
 #include "fbpp/core/transaction.hpp"
-#include "fbpp_util/config.h"
 #include <thread>
 #include <chrono>
 

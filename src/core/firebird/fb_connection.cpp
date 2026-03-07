@@ -4,7 +4,6 @@
 #include "fbpp/core/named_param_parser.hpp"
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/status_utils.hpp"
-#include "fbpp_util/config.h"
 #include "fbpp_util/trace.h"
 #include <stdexcept>
 
@@ -23,7 +22,8 @@ Connection::Connection(const std::string& database)
 Connection::Connection(const ConnectionParams& params)
     : env_(Environment::getInstance())
     , status_(env_.getMaster()->getStatus())
-    , statusWrapper_(status_) {
+    , statusWrapper_(status_)
+    , options_(params.options) {
     connect(params);
 }
 
@@ -448,13 +448,7 @@ std::shared_ptr<Statement> Connection::prepareStatement(const std::string& sql, 
 
     // Lazy initialization of cache
     if (!statementCache_) {
-        // Get cache configuration
-        StatementCache::CacheConfig cacheConfig;
-        cacheConfig.enabled = util::Config::cache().enabled;
-        cacheConfig.maxSize = util::Config::cache().maxStatements;
-        cacheConfig.ttlMinutes = util::Config::cache().ttlMinutes;
-
-        statementCache_ = std::make_unique<StatementCache>(cacheConfig);
+        statementCache_ = std::make_unique<StatementCache>(options_.statementCache);
     }
 
     // Get or create cached statement
@@ -552,6 +546,21 @@ StatementCache::Statistics Connection::getCacheStatistics() const {
 
     // Return empty statistics if cache not initialized
     return StatementCache::Statistics{};
+}
+
+void Connection::setOptions(const ConnectionOptions& options) {
+    options_ = options;
+    if (statementCache_) {
+        statementCache_->setEnabled(options_.statementCache.enabled);
+        statementCache_->setMaxSize(options_.statementCache.maxSize);
+        statementCache_->setTtlMinutes(options_.statementCache.ttlMinutes);
+    }
+}
+
+void Connection::setStatementCacheConfig(const StatementCacheConfig& config) {
+    ConnectionOptions updated = options_;
+    updated.statementCache = config;
+    setOptions(updated);
 }
 
 } // namespace core
