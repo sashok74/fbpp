@@ -72,6 +72,7 @@ fbpp_configure_cxx_target(fbpp_core)
 add_library(fbpp_schema STATIC
     src/schema/type_mapper.cpp
     src/schema/query_analyzer.cpp
+    src/schema/schema_inspector.cpp
 )
 
 target_include_directories(fbpp_schema PUBLIC

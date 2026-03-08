@@ -720,3 +720,21 @@ target_link_libraries(test_query_analyzer PRIVATE
 
 fbpp_configure_cxx_target(test_query_analyzer)
 gtest_discover_tests(test_query_analyzer)
+
+# SchemaInspector integration test (requires live DB)
+add_executable(test_schema_inspector
+    unit/test_schema_inspector.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_schema_inspector PRIVATE
+    fbpp_schema
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+fbpp_configure_cxx_target(test_schema_inspector)
+gtest_discover_tests(test_schema_inspector)
