@@ -194,12 +194,14 @@ jobs:
         shell: pwsh
         run: |
           $buildRoot = "build/windows/$env:BUILD_TYPE"
+          # Quote args containing $env:VAR so PowerShell doesn't split them at
+          # the '=' sign and leak '$env:VAR' literal through to conan.
           conan install . `
-            --output-folder=$buildRoot `
+            "--output-folder=$buildRoot" `
             --build=missing `
-            -s build_type=$env:BUILD_TYPE `
-            -s compiler.cppstd=20 `
-            -c tools.cmake.cmaketoolchain:generator="Ninja"
+            "-s" "build_type=$env:BUILD_TYPE" `
+            "-s" "compiler.cppstd=20" `
+            "-c" "tools.cmake.cmaketoolchain:generator=Ninja"
 
           Write-Host ""
           Write-Host "Conan-generated files:"
@@ -232,26 +234,51 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "CMake configure failed with exit $LASTEXITCODE" }
 
       # ============================================
-      # Step 9: Build
+      # Step 9: Copy test config (BEFORE build)
       # ============================================
-      - name: Build
-        shell: pwsh
-        run: |
-          $buildRoot = "build/windows/$env:BUILD_TYPE"
-          cmake --build $buildRoot --parallel
-          if ($LASTEXITCODE -ne 0) { throw "Build failed with exit $LASTEXITCODE" }
-
-      # ============================================
-      # Step 10: Copy test config
-      # ============================================
+      # test_query_generator_runner is invoked from CMake build-time as a
+      # codegen step; it needs test_config.json reachable via the standard
+      # search paths relative to the build directory.
       - name: Copy test config
         shell: pwsh
         run: |
           $buildRoot = "build/windows/$env:BUILD_TYPE"
-          $dst = Join-Path $buildRoot "config"
-          New-Item -ItemType Directory -Force -Path $dst | Out-Null
-          Copy-Item -Force config/test_config.json (Join-Path $dst "test_config.json")
-          Write-Host "✓ test_config.json copied"
+          New-Item -ItemType Directory -Force -Path $buildRoot | Out-Null
+
+          $dst1 = Join-Path $buildRoot "config"
+          New-Item -ItemType Directory -Force -Path $dst1 | Out-Null
+          Copy-Item -Force config/test_config.json (Join-Path $dst1 "test_config.json")
+
+          # Also place it in build/windows/config so the ../../config/
+          # search path from build/windows/RelWithDebInfo/tests/ resolves.
+          $winRoot = "build/windows"
+          $dst2 = Join-Path $winRoot "config"
+          New-Item -ItemType Directory -Force -Path $dst2 | Out-Null
+          Copy-Item -Force config/test_config.json (Join-Path $dst2 "test_config.json")
+
+          Write-Host "✓ test_config.json copied to $dst1 and $dst2"
+
+      # ============================================
+      # Step 10: Build
+      # ============================================
+      - name: Build
+        shell: pwsh
+        env:
+          # Build-time codegen needs FIREBIRD_DB_PATH + credentials to
+          # provision its scoped temp databases; the default path in
+          # test_config.json points to the local dev mount (/mnt/test/...).
+          FIREBIRD_HOST: localhost
+          FIREBIRD_PORT: '3050'
+          FIREBIRD_USER: SYSDBA
+          FIREBIRD_PASSWORD: planomer
+          FIREBIRD_CHARSET: UTF8
+          FIREBIRD_DB_PATH: C:/temp/fbpp_temp_test.fdb
+          FIREBIRD_MAIN_DB_PATH: C:/temp/testdb.fdb
+        run: |
+          New-Item -ItemType Directory -Force -Path C:/temp | Out-Null
+          $buildRoot = "build/windows/$env:BUILD_TYPE"
+          cmake --build $buildRoot --parallel
+          if ($LASTEXITCODE -ne 0) { throw "Build failed with exit $LASTEXITCODE" }
 
       # ============================================
       # Step 11: Run tests
@@ -262,12 +289,13 @@ jobs:
           FIREBIRD_HOST: localhost
           FIREBIRD_PORT: '3050'
           FIREBIRD_USER: SYSDBA
+          FIREBIRD_PASSWORD: planomer
           FIREBIRD_CHARSET: UTF8
           FIREBIRD_DB_PATH: C:/temp/fbpp_temp_test.fdb
           FIREBIRD_MAIN_DB_PATH: C:/temp/testdb.fdb
           FIREBIRD_PERSISTENT_DB_PATH: C:/temp/testdb.fdb
         run: |
-          if (-not $env:FIREBIRD_PASSWORD) { $env:FIREBIRD_PASSWORD = "planomer" }
+          New-Item -ItemType Directory -Force -Path C:/temp | Out-Null
 
           Write-Host "========================================="
           Write-Host "Environment"

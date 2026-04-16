@@ -342,6 +342,11 @@ jobs:
           FIREBIRD_PORT: 3050
           FIREBIRD_USER: SYSDBA
           FIREBIRD_PASSWORD: planomer
+          # Build-time codegen (test_query_generator_runner) needs these to
+          # provision its own scoped temp databases. Without FIREBIRD_DB_PATH
+          # it falls back to the local dev default /mnt/test/*.fdb which
+          # doesn't exist on CI runners.
+          FIREBIRD_DB_PATH: /tmp/fbpp_temp_test.fdb
           FIREBIRD_PERSISTENT_DB_PATH: /tmp/testdb.fdb
           FIREBIRD_CHARSET: UTF8
         run: |
