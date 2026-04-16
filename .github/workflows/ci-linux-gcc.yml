@@ -322,7 +322,16 @@ jobs:
             && echo "✓ Firebird service is accessible" \
             || (echo "✗ ERROR: Cannot connect to Firebird" && exit 1)
 
-          bash scripts/prepare_test_db.sh
+          # scripts/prepare_test_db.sh would pre-create /tmp/testdb.fdb for the
+          # persistent "db" config section, which is only consumed by examples.
+          # Examples are disabled in CI (-DBUILD_EXAMPLES=OFF) and unit tests
+          # auto-provision their own DB via the "tests.temp_db" section, so
+          # this step is best-effort: skip silently if the script is absent.
+          if [ -f scripts/prepare_test_db.sh ]; then
+              bash scripts/prepare_test_db.sh
+          else
+              echo "ℹ scripts/prepare_test_db.sh not present — skipping (tests auto-create temp DBs)"
+          fi
 
       # ============================================
       # Step 10: Build project
