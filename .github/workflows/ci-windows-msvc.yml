@@ -218,10 +218,12 @@ jobs:
           }
           Write-Host "Using toolchain: $($toolchain.FullName)"
 
+          # Quote args so PowerShell doesn't treat `$env:BUILD_TYPE` as a
+          # separate token after the `=` sign.
           cmake -S . -B $buildRoot `
             -G Ninja `
-            -DCMAKE_TOOLCHAIN_FILE="$($toolchain.FullName)" `
-            -DCMAKE_BUILD_TYPE=$env:BUILD_TYPE `
+            "-DCMAKE_TOOLCHAIN_FILE=$($toolchain.FullName)" `
+            "-DCMAKE_BUILD_TYPE=$env:BUILD_TYPE" `
             -DBUILD_TESTING=ON `
             -DBUILD_EXAMPLES=OFF `
             -DFBPP_BUILD_LIBS=ON `

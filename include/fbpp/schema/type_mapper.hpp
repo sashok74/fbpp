@@ -3,6 +3,7 @@
 #include "fbpp/schema/adapter_config.hpp"
 #include "fbpp/core/message_metadata.hpp"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -10,8 +11,8 @@ namespace fbpp::schema {
 
 struct CppTypeInfo {
     struct ScaledNumericInfo {
-        int intWords;
-        int16_t scale;
+        int          intWords;
+        std::int16_t scale;
     };
 
     std::string cppType;
