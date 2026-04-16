@@ -51,8 +51,9 @@ jobs:
           Write-Host ""
           cmake --version | Select-Object -First 1
           Write-Host ""
-          where.exe cl.exe 2>$null
-          Write-Host ""
+          # cl.exe is not yet on PATH here — msvc-dev-cmd sets that up later.
+          $cl = Get-Command cl.exe -ErrorAction SilentlyContinue
+          if ($cl) { Write-Host "cl.exe: $($cl.Source)" } else { Write-Host "cl.exe not yet on PATH (msvc-dev-cmd runs later)" }
 
       # ============================================
       # Step 3: Install Firebird 5 (portable ZIP)
