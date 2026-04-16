@@ -85,35 +85,47 @@ jobs:
           Write-Host "✓ Firebird installed"
 
       # ============================================
-      # Step 4: Configure Firebird runtime
+      # Step 4: Initialize security DB and start Firebird
       # ============================================
-      - name: Configure and start Firebird server
+      - name: Initialize security DB and start Firebird
         shell: pwsh
         run: |
           Write-Host "========================================="
-          Write-Host "Configuring Firebird server"
+          Write-Host "Initializing Firebird security database"
           Write-Host "========================================="
 
           $env:FIREBIRD = $env:FIREBIRD_DIR
 
-          # Seed SYSDBA.password expected by Firebird at startup.
-          $sysdbaPasswordFile = Join-Path $env:FIREBIRD_DIR "SYSDBA.password"
-          if (-not (Test-Path $sysdbaPasswordFile)) {
-              "ISC_USER=SYSDBA`nISC_PASSWD=masterkey`n" | Set-Content -Encoding ASCII $sysdbaPasswordFile
-          }
+          $isqlExe = Join-Path $env:FIREBIRD_DIR "isql.exe"
+          $fbExe   = Join-Path $env:FIREBIRD_DIR "firebird.exe"
+          if (-not (Test-Path $isqlExe))   { throw "isql.exe not found at $isqlExe" }
+          if (-not (Test-Path $fbExe))     { throw "firebird.exe not found at $fbExe" }
 
-          # Firebird firebird.exe -a -> standalone superserver listening on 3050.
-          $fbExe = Join-Path $env:FIREBIRD_DIR "firebird.exe"
-          if (-not (Test-Path $fbExe)) {
-              throw "firebird.exe not found at $fbExe."
-          }
+          # Per doc/README.security_database.txt: Firebird 5 ships without a
+          # pre-seeded SYSDBA account. We create it via isql in embedded mode
+          # (connecting through the employee alias) BEFORE starting the server.
+          $initSql = @"
+          create user SYSDBA password 'planomer';
+          commit;
+          quit;
+          "@
+          $initSqlFile = Join-Path $env:RUNNER_TEMP "init_sysdba.sql"
+          Set-Content -Path $initSqlFile -Value $initSql -Encoding ASCII
 
+          Write-Host "Running: isql -i $initSqlFile -user sysdba employee"
+          & $isqlExe -i $initSqlFile -user sysdba employee
+          if ($LASTEXITCODE -ne 0) {
+              throw "isql failed to initialize SYSDBA user (exit $LASTEXITCODE)"
+          }
+          Write-Host "✓ SYSDBA user created with password 'planomer'"
+
+          Write-Host ""
           Write-Host "Starting Firebird in standalone (superserver) mode..."
           Start-Process -FilePath $fbExe -ArgumentList "-a" -WorkingDirectory $env:FIREBIRD_DIR -PassThru | `
               Select-Object Id, ProcessName | Format-Table
 
           # Give the server a moment to open its TCP port.
-          Start-Sleep -Seconds 6
+          Start-Sleep -Seconds 4
 
           # Verify the TCP socket is listening on 3050.
           $attempts = 0
@@ -136,20 +148,6 @@ jobs:
               throw "Firebird did not open port 3050 within timeout."
           }
           Write-Host "✓ Firebird listening on 127.0.0.1:3050"
-
-          # Change SYSDBA password to 'planomer' so test_config.json works unchanged.
-          $gsec = Join-Path $env:FIREBIRD_DIR "gsec.exe"
-          if (Test-Path $gsec) {
-              & $gsec -user SYSDBA -password masterkey -modify SYSDBA -pw planomer
-              if ($LASTEXITCODE -ne 0) {
-                  Write-Host "gsec returned $LASTEXITCODE - will fall back to FIREBIRD_PASSWORD=masterkey in tests"
-                  "FIREBIRD_PASSWORD=masterkey" >> $env:GITHUB_ENV
-              } else {
-                  Write-Host "✓ SYSDBA password set to 'planomer'"
-              }
-          } else {
-              "FIREBIRD_PASSWORD=masterkey" >> $env:GITHUB_ENV
-          }
 
       # ============================================
       # Step 5: Add Firebird to PATH (runtime DLL)
