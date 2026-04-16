@@ -4,6 +4,7 @@
 #include "fbpp/core/named_param_parser.hpp"
 #include "fbpp/core/exception.hpp"
 #include "fbpp/core/status_utils.hpp"
+#include "fbpp/core/detail/firebird_raii.hpp"
 #include "fbpp_util/trace.h"
 #include <stdexcept>
 
@@ -39,9 +40,9 @@ void Connection::connect(const ConnectionParams& params) {
     try {
         auto& st = status();
 
-        // Build DPB
-        Firebird::IXpbBuilder* dpb = env_.getUtil()->getXpbBuilder(
-            &st, Firebird::IXpbBuilder::DPB, nullptr, 0);
+        // Build DPB (RAII: disposed automatically on scope exit, including throw paths)
+        detail::XpbBuilderGuard dpb(env_.getUtil()->getXpbBuilder(
+            &st, Firebird::IXpbBuilder::DPB, nullptr, 0));
 
         if (!params.user.empty()) {
             dpb->insertString(&st, isc_dpb_user_name, params.user.c_str());
@@ -70,8 +71,6 @@ void Connection::connect(const ConnectionParams& params) {
             params.database.c_str(),
             dpb->getBufferLength(&st),
             dpb->getBuffer(&st));
-
-        dpb->dispose();
 
         if (!attachment_) {
             fbpp::util::trace(fbpp::util::TraceLevel::error, "Connection",
@@ -281,9 +280,9 @@ void Connection::createDatabase(const ConnectionParams& params) {
     Firebird::ThrowStatusWrapper st(raw);
 
     try {
-        // Build DPB
-        Firebird::IXpbBuilder* dpb = env.getUtil()->getXpbBuilder(
-            &st, Firebird::IXpbBuilder::DPB, nullptr, 0);
+        // Build DPB (RAII: disposed on scope exit, including throw paths)
+        detail::XpbBuilderGuard dpb(env.getUtil()->getXpbBuilder(
+            &st, Firebird::IXpbBuilder::DPB, nullptr, 0));
 
         if (!params.user.empty()) {
             dpb->insertString(&st, isc_dpb_user_name, params.user.c_str());
@@ -315,8 +314,6 @@ void Connection::createDatabase(const ConnectionParams& params) {
             dpb->getBufferLength(&st),
             dpb->getBuffer(&st));
 
-        dpb->dispose();
-
         if (att) {
             att->detach(&st);
             att->release();
@@ -342,9 +339,9 @@ void Connection::dropDatabase(const ConnectionParams& params) {
     Firebird::IStatus* raw_status = env.getMaster()->getStatus();
     Firebird::CheckStatusWrapper checkStatus(raw_status);
 
-    // Build DPB
-    Firebird::IXpbBuilder* dpb = env.getUtil()->getXpbBuilder(
-        &checkStatus, Firebird::IXpbBuilder::DPB, nullptr, 0);
+    // Build DPB (RAII: disposed on scope exit)
+    detail::XpbBuilderGuard dpb(env.getUtil()->getXpbBuilder(
+        &checkStatus, Firebird::IXpbBuilder::DPB, nullptr, 0));
 
     if (!params.user.empty()) {
         dpb->insertString(&checkStatus, isc_dpb_user_name, params.user.c_str());
@@ -360,8 +357,6 @@ void Connection::dropDatabase(const ConnectionParams& params) {
         params.database.c_str(),
         dpb->getBufferLength(&checkStatus),
         dpb->getBuffer(&checkStatus));
-
-    dpb->dispose();
 
     if (checkStatus.getState() & Firebird::IStatus::STATE_ERRORS) {
         const bool missing = fb_status::isDbMissingOnAttach(raw_status);
@@ -404,9 +399,9 @@ bool Connection::databaseExists(const std::string& database, const ConnectionPar
     Firebird::ThrowStatusWrapper st(raw);
 
     try {
-        // Build DPB
-        Firebird::IXpbBuilder* dpb = env.getUtil()->getXpbBuilder(
-            &st, Firebird::IXpbBuilder::DPB, nullptr, 0);
+        // Build DPB (RAII: disposed on scope exit, including throw paths)
+        detail::XpbBuilderGuard dpb(env.getUtil()->getXpbBuilder(
+            &st, Firebird::IXpbBuilder::DPB, nullptr, 0));
 
         if (!params.user.empty()) {
             dpb->insertString(&st, isc_dpb_user_name, params.user.c_str());
@@ -422,8 +417,6 @@ bool Connection::databaseExists(const std::string& database, const ConnectionPar
             fullParams.database.c_str(),
             dpb->getBufferLength(&st),
             dpb->getBuffer(&st));
-
-        dpb->dispose();
 
         if (att) {
             att->detach(&st);

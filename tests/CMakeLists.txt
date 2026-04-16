@@ -89,6 +89,40 @@ target_link_libraries(test_firebird_exception PRIVATE
 
 gtest_discover_tests(test_firebird_exception)
 
+# Connection error-path tests (exercise DPB RAII guard)
+add_executable(test_connection_error_paths
+    unit/test_connection_error_paths.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_connection_error_paths PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_connection_error_paths)
+
+# BLOB error-path tests (exercise IBlob RAII guard)
+add_executable(test_blob_error_paths
+    unit/test_blob_error_paths.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_blob_error_paths PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_blob_error_paths)
+
 # Statement cache test
 add_executable(test_statement_cache
     unit/test_statement_cache.cpp

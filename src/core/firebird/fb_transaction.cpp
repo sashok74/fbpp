@@ -4,6 +4,7 @@
 #include "fbpp/core/result_set.hpp"
 #include "fbpp/core/batch.hpp"
 #include "fbpp/core/exception.hpp"
+#include "fbpp/core/detail/firebird_raii.hpp"
 #include "fbpp_util/trace.h"
 #include <cstring>
 
@@ -175,27 +176,29 @@ std::vector<uint8_t> Transaction::loadBlob(ISC_QUAD* blobId) {
     try {
         auto& st = status();
         auto attachment = connection_->getAttachment();
-        
-        // Open BLOB for reading
-        Firebird::IBlob* blob = attachment->openBlob(&st, transaction_, blobId, 0, nullptr);
+
+        // Open BLOB for reading. RAII guard ensures close()+release() on any throw path.
+        detail::BlobGuard blob(
+            attachment->openBlob(&st, transaction_, blobId, 0, nullptr),
+            &st);
         if (!blob) {
             throw FirebirdException("Failed to open BLOB");
         }
-        
+
         // Read BLOB data in segments
         std::vector<uint8_t> data;
         const unsigned segmentSize = 32768; // 32KB segments
         std::vector<uint8_t> segment(segmentSize);
-        
+
         while (true) {
             unsigned actualLength = 0;
             int result = blob->getSegment(&st, segmentSize, segment.data(), &actualLength);
-            
-            if (result == Firebird::IStatus::RESULT_OK || 
+
+            if (result == Firebird::IStatus::RESULT_OK ||
                 result == Firebird::IStatus::RESULT_SEGMENT) {
                 // Append segment to data
                 data.insert(data.end(), segment.begin(), segment.begin() + actualLength);
-                
+
                 if (result == Firebird::IStatus::RESULT_OK) {
                     // Last segment read successfully
                     break;
@@ -205,11 +208,8 @@ std::vector<uint8_t> Transaction::loadBlob(ISC_QUAD* blobId) {
                 break;
             }
         }
-        
-        // Close BLOB
-        blob->close(&st);
-        blob->release();
-        
+
+        // BlobGuard's destructor will close() and release() on scope exit.
         return data;
     }
     catch (const Firebird::FbException& e) {
@@ -227,30 +227,29 @@ ISC_QUAD Transaction::createBlob(const std::vector<uint8_t>& data) {
     try {
         auto& st = status();
         auto attachment = connection_->getAttachment();
-        
+
         ISC_QUAD blobId;
         std::memset(&blobId, 0, sizeof(ISC_QUAD));
-        
-        // Create new BLOB
-        Firebird::IBlob* blob = attachment->createBlob(&st, transaction_, &blobId, 0, nullptr);
+
+        // Create new BLOB. RAII guard ensures close()+release() on any throw path.
+        detail::BlobGuard blob(
+            attachment->createBlob(&st, transaction_, &blobId, 0, nullptr),
+            &st);
         if (!blob) {
             throw FirebirdException("Failed to create BLOB");
         }
-        
+
         // Write data in segments
         const unsigned segmentSize = 32768; // 32KB segments
         size_t offset = 0;
-        
+
         while (offset < data.size()) {
             size_t chunkSize = std::min(static_cast<size_t>(segmentSize), data.size() - offset);
             blob->putSegment(&st, chunkSize, data.data() + offset);
             offset += chunkSize;
         }
-        
-        // Close BLOB
-        blob->close(&st);
-        blob->release();
-        
+
+        // BlobGuard's destructor will close() and release() on scope exit.
         return blobId;
     }
     catch (const Firebird::FbException& e) {
