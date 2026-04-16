@@ -1,0 +1,313 @@
+name: CI - Windows MSVC
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'claude/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      debug_mode:
+        description: 'Enable verbose debug output'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  BUILD_TYPE: RelWithDebInfo
+  FIREBIRD_DIR: C:/fb50
+  FIREBIRD_VERSION: "5.0.0.1306"
+
+jobs:
+  build-and-test:
+    name: Build and Test (MSVC 2022, RelWithDebInfo)
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    steps:
+      # ============================================
+      # Step 1: Checkout repository
+      # ============================================
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ============================================
+      # Step 2: Display system information
+      # ============================================
+      - name: Display system information
+        shell: pwsh
+        run: |
+          Write-Host "========================================="
+          Write-Host "System Information"
+          Write-Host "========================================="
+          [System.Environment]::OSVersion
+          Write-Host ""
+          Write-Host "CPU count: $($env:NUMBER_OF_PROCESSORS)"
+          Write-Host ""
+          cmake --version | Select-Object -First 1
+          Write-Host ""
+          where.exe cl.exe 2>$null
+          Write-Host ""
+
+      # ============================================
+      # Step 3: Install Firebird 5 (portable ZIP)
+      # ============================================
+      - name: Install Firebird 5 (embedded/standalone)
+        shell: pwsh
+        run: |
+          Write-Host "========================================="
+          Write-Host "Installing Firebird $env:FIREBIRD_VERSION to $env:FIREBIRD_DIR"
+          Write-Host "========================================="
+
+          $url = "https://github.com/FirebirdSQL/firebird/releases/download/v5.0.0/Firebird-$($env:FIREBIRD_VERSION)-0-windows-x64.zip"
+          $tmp = Join-Path $env:RUNNER_TEMP "firebird.zip"
+
+          Write-Host "Downloading $url"
+          Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing
+
+          New-Item -ItemType Directory -Force -Path $env:FIREBIRD_DIR | Out-Null
+          Expand-Archive -Path $tmp -DestinationPath $env:FIREBIRD_DIR -Force
+
+          Write-Host ""
+          Write-Host "Firebird archive contents:"
+          Get-ChildItem $env:FIREBIRD_DIR | Select-Object Name, Length | Format-Table
+
+          if (-not (Test-Path "$env:FIREBIRD_DIR/fbclient.dll")) {
+              throw "fbclient.dll not found in $env:FIREBIRD_DIR after extraction."
+          }
+
+          Write-Host "✓ Firebird installed"
+
+      # ============================================
+      # Step 4: Configure Firebird runtime
+      # ============================================
+      - name: Configure and start Firebird server
+        shell: pwsh
+        run: |
+          Write-Host "========================================="
+          Write-Host "Configuring Firebird server"
+          Write-Host "========================================="
+
+          $env:FIREBIRD = $env:FIREBIRD_DIR
+
+          # Seed SYSDBA.password expected by Firebird at startup.
+          $sysdbaPasswordFile = Join-Path $env:FIREBIRD_DIR "SYSDBA.password"
+          if (-not (Test-Path $sysdbaPasswordFile)) {
+              "ISC_USER=SYSDBA`nISC_PASSWD=masterkey`n" | Set-Content -Encoding ASCII $sysdbaPasswordFile
+          }
+
+          # Firebird firebird.exe -a -> standalone superserver listening on 3050.
+          $fbExe = Join-Path $env:FIREBIRD_DIR "firebird.exe"
+          if (-not (Test-Path $fbExe)) {
+              throw "firebird.exe not found at $fbExe."
+          }
+
+          Write-Host "Starting Firebird in standalone (superserver) mode..."
+          Start-Process -FilePath $fbExe -ArgumentList "-a" -WorkingDirectory $env:FIREBIRD_DIR -PassThru | `
+              Select-Object Id, ProcessName | Format-Table
+
+          # Give the server a moment to open its TCP port.
+          Start-Sleep -Seconds 6
+
+          # Verify the TCP socket is listening on 3050.
+          $attempts = 0
+          $maxAttempts = 15
+          $connected = $false
+          while (-not $connected -and $attempts -lt $maxAttempts) {
+              try {
+                  $tcp = New-Object System.Net.Sockets.TcpClient
+                  $tcp.Connect("127.0.0.1", 3050)
+                  if ($tcp.Connected) {
+                      $connected = $true
+                      $tcp.Close()
+                  }
+              } catch {
+                  Start-Sleep -Seconds 2
+                  $attempts++
+              }
+          }
+          if (-not $connected) {
+              throw "Firebird did not open port 3050 within timeout."
+          }
+          Write-Host "✓ Firebird listening on 127.0.0.1:3050"
+
+          # Change SYSDBA password to 'planomer' so test_config.json works unchanged.
+          $gsec = Join-Path $env:FIREBIRD_DIR "gsec.exe"
+          if (Test-Path $gsec) {
+              & $gsec -user SYSDBA -password masterkey -modify SYSDBA -pw planomer
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Host "gsec returned $LASTEXITCODE - will fall back to FIREBIRD_PASSWORD=masterkey in tests"
+                  "FIREBIRD_PASSWORD=masterkey" >> $env:GITHUB_ENV
+              } else {
+                  Write-Host "✓ SYSDBA password set to 'planomer'"
+              }
+          } else {
+              "FIREBIRD_PASSWORD=masterkey" >> $env:GITHUB_ENV
+          }
+
+      # ============================================
+      # Step 5: Add Firebird to PATH (runtime DLL)
+      # ============================================
+      - name: Add Firebird to PATH
+        shell: pwsh
+        run: |
+          Write-Output "$env:FIREBIRD_DIR" >> $env:GITHUB_PATH
+          Write-Output "FIREBIRD=$env:FIREBIRD_DIR" >> $env:GITHUB_ENV
+
+      # ============================================
+      # Step 6: Set up Python and Conan
+      # ============================================
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Conan
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install "conan>=2.3,<3"
+          conan --version
+
+      # Set up the MSVC developer command-prompt environment for all subsequent
+      # steps (cl.exe, link.exe, etc. on PATH; INCLUDE/LIB set). Without this,
+      # Ninja can't find the compiler.
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Detect Conan profile
+        shell: pwsh
+        run: |
+          conan profile detect --force
+          conan profile show
+
+      # ============================================
+      # Step 7: Conan install
+      # ============================================
+      - name: Conan install
+        shell: pwsh
+        run: |
+          $buildRoot = "build/windows/$env:BUILD_TYPE"
+          conan install . `
+            --output-folder=$buildRoot `
+            --build=missing `
+            -s build_type=$env:BUILD_TYPE `
+            -s compiler.cppstd=20 `
+            -c tools.cmake.cmaketoolchain:generator="Ninja"
+
+          Write-Host ""
+          Write-Host "Conan-generated files:"
+          Get-ChildItem $buildRoot -Recurse -Filter "conan_toolchain.cmake" | Select-Object FullName
+
+      # ============================================
+      # Step 8: Configure CMake
+      # ============================================
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          $buildRoot = "build/windows/$env:BUILD_TYPE"
+          $toolchain = Get-ChildItem -Recurse -Path $buildRoot -Filter "conan_toolchain.cmake" | Select-Object -First 1
+          if (-not $toolchain) {
+              throw "conan_toolchain.cmake not found under $buildRoot"
+          }
+          Write-Host "Using toolchain: $($toolchain.FullName)"
+
+          cmake -S . -B $buildRoot `
+            -G Ninja `
+            -DCMAKE_TOOLCHAIN_FILE="$($toolchain.FullName)" `
+            -DCMAKE_BUILD_TYPE=$env:BUILD_TYPE `
+            -DBUILD_TESTING=ON `
+            -DBUILD_EXAMPLES=OFF `
+            -DFBPP_BUILD_LIBS=ON `
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+          if ($LASTEXITCODE -ne 0) { throw "CMake configure failed with exit $LASTEXITCODE" }
+
+      # ============================================
+      # Step 9: Build
+      # ============================================
+      - name: Build
+        shell: pwsh
+        run: |
+          $buildRoot = "build/windows/$env:BUILD_TYPE"
+          cmake --build $buildRoot --parallel
+          if ($LASTEXITCODE -ne 0) { throw "Build failed with exit $LASTEXITCODE" }
+
+      # ============================================
+      # Step 10: Copy test config
+      # ============================================
+      - name: Copy test config
+        shell: pwsh
+        run: |
+          $buildRoot = "build/windows/$env:BUILD_TYPE"
+          $dst = Join-Path $buildRoot "config"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item -Force config/test_config.json (Join-Path $dst "test_config.json")
+          Write-Host "✓ test_config.json copied"
+
+      # ============================================
+      # Step 11: Run tests
+      # ============================================
+      - name: Run tests
+        shell: pwsh
+        env:
+          FIREBIRD_HOST: localhost
+          FIREBIRD_PORT: '3050'
+          FIREBIRD_USER: SYSDBA
+          FIREBIRD_CHARSET: UTF8
+          FIREBIRD_DB_PATH: C:/temp/fbpp_temp_test.fdb
+          FIREBIRD_MAIN_DB_PATH: C:/temp/testdb.fdb
+          FIREBIRD_PERSISTENT_DB_PATH: C:/temp/testdb.fdb
+        run: |
+          if (-not $env:FIREBIRD_PASSWORD) { $env:FIREBIRD_PASSWORD = "planomer" }
+
+          Write-Host "========================================="
+          Write-Host "Environment"
+          Write-Host "========================================="
+          Write-Host "FIREBIRD_HOST             = $env:FIREBIRD_HOST"
+          Write-Host "FIREBIRD_PORT             = $env:FIREBIRD_PORT"
+          Write-Host "FIREBIRD_USER             = $env:FIREBIRD_USER"
+          Write-Host "FIREBIRD_DB_PATH          = $env:FIREBIRD_DB_PATH"
+          Write-Host "FIREBIRD_MAIN_DB_PATH     = $env:FIREBIRD_MAIN_DB_PATH"
+          Write-Host ""
+
+          New-Item -ItemType Directory -Force -Path C:/temp | Out-Null
+
+          $buildRoot = "build/windows/$env:BUILD_TYPE"
+          ctest --test-dir $buildRoot --output-on-failure
+
+      # ============================================
+      # Step 12: Upload build logs on failure
+      # ============================================
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-windows
+          path: |
+            build/windows/${{ env.BUILD_TYPE }}/CMakeFiles/CMakeOutput.log
+            build/windows/${{ env.BUILD_TYPE }}/CMakeFiles/CMakeError.log
+            build/windows/${{ env.BUILD_TYPE }}/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+
+      # ============================================
+      # Step 13: Summary
+      # ============================================
+      - name: Summary
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "========================================="
+          Write-Host "CI/CD Pipeline Summary (Windows MSVC)"
+          Write-Host "========================================="
+          Write-Host "Build type:       $env:BUILD_TYPE"
+          Write-Host "Firebird:         $env:FIREBIRD_VERSION @ $env:FIREBIRD_DIR"
+          Write-Host "Status:           ${{ job.status }}"
+          Write-Host "========================================="
