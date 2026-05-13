@@ -255,13 +255,14 @@ private:
     int16_t offset_;      // Offset from UTC in minutes
 };
 
-// std::chrono::zoned_time / time_zone require a C++20 stdlib with the
-// timezone-database additions (__cpp_lib_chrono >= 201907L). The C++20
-// language alone isn't enough — e.g. older mingw-w64 libstdc++ shipped
-// with bcc64x clang in RAD Studio 13 implements the C++20 language but
-// not the timezone library.
-#if FBPP_EXTENDED_TYPES_CPLUSPLUS >= 202002L && \
-    defined(__cpp_lib_chrono) && (__cpp_lib_chrono >= 201907L)
+// std::chrono::zoned_time / time_zone are part of C++20 but some C++20
+// stdlibs ship the language without these timezone-database additions —
+// notably the mingw-w64 libstdc++ bundled with bcc64x clang in RAD Studio
+// 13. Detect Embarcadero/Borland explicitly via __BORLANDC__ rather than
+// __cpp_lib_chrono, because libstdc++ 13 (used by other compilers, like
+// GCC 13 on Ubuntu) provides zoned_time without bumping the feature-test
+// macro to 201907L.
+#if FBPP_EXTENDED_TYPES_CPLUSPLUS >= 202002L && !defined(__BORLANDC__)
 /**
  * @brief User-facing C++20 type for Firebird TIMESTAMP WITH TIME ZONE
  *

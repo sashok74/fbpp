@@ -84,10 +84,11 @@ struct TypeAdapter<std::chrono::system_clock::time_point> {
 // time-only values do not carry the date context needed for robust timezone
 // and DST conversion.
 //
-// Gated on the C++20 chrono-with-timezone feature macro because some C++20
-// stdlibs (notably the mingw-w64 libstdc++ used by bcc64x in RAD Studio 13)
-// ship the language but not zoned_time/time_zone.
-#if defined(__cpp_lib_chrono) && (__cpp_lib_chrono >= 201907L)
+// Gated off Embarcadero/Borland (bcc64x clang in RAD Studio 13) explicitly:
+// its mingw-w64 libstdc++ doesn't ship zoned_time / time_zone. We do not
+// use __cpp_lib_chrono here because libstdc++ 13 leaves the macro at the
+// C++17 value even though it provides zoned_time.
+#if !defined(__BORLANDC__)
 template<>
 struct TypeAdapter<std::chrono::zoned_time<std::chrono::microseconds>> {
     static constexpr bool is_specialized = true;
@@ -199,7 +200,7 @@ struct TypeAdapter<std::chrono::zoned_time<std::chrono::microseconds>> {
         }
     }
 };
-#endif // __cpp_lib_chrono >= 201907L
+#endif // !defined(__BORLANDC__)
 
 } // namespace fbpp::core
 
