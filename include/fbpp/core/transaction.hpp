@@ -14,6 +14,7 @@ class Connection;
 class Statement;
 class ResultSet;
 class Batch;
+class ParamBinder;
 
 /**
  * Transaction handle bound to a single Connection attachment.
@@ -63,7 +64,14 @@ public:
     
     // BLOB operations
     std::vector<uint8_t> loadBlob(ISC_QUAD* blobId);
-    ISC_QUAD createBlob(const std::vector<uint8_t>& data);
+
+    // Create a new BLOB and write data into it. The optional subType tags
+    // the BLOB with a Firebird sub-type (0 = binary, 1 = text; negative
+    // values reserved for system subtypes). When subType == 0 (default),
+    // no BPB is sent — wire-compatible with the original single-arg
+    // overload. For text BLOB columns pass subType = 1 so Firebird knows
+    // to treat bytes as text on subsequent reads / transliteration.
+    ISC_QUAD createBlob(const std::vector<uint8_t>& data, int subType = 0);
     
     // Execute operations with Statement (for INSERT/UPDATE/DELETE)
     unsigned execute(const std::unique_ptr<Statement>& statement);
@@ -100,6 +108,17 @@ public:
     template<typename ParamsType>
     std::unique_ptr<ResultSet> openCursor(const std::shared_ptr<Statement>& statement,
                                           const ParamsType& params);
+
+    // Execute / openCursor with ParamBinder (named-parameter binding without JSON).
+    // Implementations are inline in fbpp/core/param_binder.hpp (included by it).
+    unsigned execute(const std::shared_ptr<Statement>& statement, const ParamBinder& binder);
+    unsigned execute(const std::unique_ptr<Statement>& statement, const ParamBinder& binder);
+    std::unique_ptr<ResultSet> openCursor(const std::shared_ptr<Statement>& statement,
+                                          const ParamBinder& binder,
+                                          unsigned flags = 0);
+    std::unique_ptr<ResultSet> openCursor(const std::unique_ptr<Statement>& statement,
+                                          const ParamBinder& binder,
+                                          unsigned flags = 0);
 
     // Batch operations
     std::unique_ptr<Batch> createBatch(const std::unique_ptr<Statement>& statement,

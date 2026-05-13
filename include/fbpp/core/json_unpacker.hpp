@@ -133,16 +133,11 @@ inline void unpackFieldsToJson(nlohmann::json& result, const uint8_t* buffer, co
         const uint8_t* data_ptr = buffer + data_offset;
         const int16_t* null_ptr = reinterpret_cast<const int16_t*>(buffer + null_offset);
         
-        // Get field name - prefer alias over name for better SQL compatibility
-        std::string fieldName;
-        if (!fieldInfo.alias.empty()) {
-            // Use alias if available (e.g., "LAST_ID" from "MAX(ID) AS LAST_ID")
-            fieldName = fieldInfo.alias;
-        } else if (!fieldInfo.name.empty()) {
-            // Fall back to field name if no alias
-            fieldName = fieldInfo.name;
-        } else {
-            // Last resort - use generic field name
+        // User-facing identifier via shared identity helper. Generic
+        // FIELD_N fallback covers the (rare) case where both name and
+        // alias are empty.
+        std::string fieldName = displayName(fieldInfo);
+        if (fieldName.empty()) {
             fieldName = "FIELD_" + std::to_string(i);
         }
         

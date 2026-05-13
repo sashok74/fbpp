@@ -48,7 +48,8 @@ ResultSet::ResultSet(ResultSet&& other) noexcept
       status_(env_.getMaster()->getStatus()),
       statusWrapper_(status_),
       eof_(other.eof_),
-      buffer_(std::move(other.buffer_)) {
+      buffer_(std::move(other.buffer_)),
+      generation_(other.generation_) {
     other.resultSet_ = nullptr;
 }
 
@@ -60,6 +61,7 @@ ResultSet& ResultSet::operator=(ResultSet&& other) noexcept {
         transaction_ = std::move(other.transaction_);
         eof_ = other.eof_;
         buffer_ = std::move(other.buffer_);
+        generation_ = other.generation_;
         other.resultSet_ = nullptr;
     }
     return *this;
@@ -87,15 +89,18 @@ int ResultSet::fetchNext(void* buffer) {
     if (eof_) {
         return RESULT_NO_DATA;
     }
-    
+
     auto& st = status();
-    
+
     int result = resultSet_->fetchNext(&st, buffer);
-    
+
     if (result == RESULT_NO_DATA) {
         eof_ = true;
+    } else if (result == RESULT_OK) {
+        // Each successful fetch invalidates any outstanding RowView snapshots.
+        ++generation_;
     }
-    
+
     return result;
 }
 
@@ -110,12 +115,69 @@ unsigned ResultSet::getBufferSize() const {
 void ResultSet::close() {
     if (resultSet_) {
         auto& st = status();
-        
+
         resultSet_->close(&st);
         resultSet_->release();
         resultSet_ = nullptr;
         eof_ = true;
+        // Invalidate any outstanding RowView snapshots.
+        ++generation_;
     }
+}
+
+std::optional<Row> ResultSet::fetchOne() {
+    if (!resultSet_) {
+        throw FirebirdException("ResultSet::fetchOne called on closed cursor");
+    }
+    if (eof_) {
+        return std::nullopt;
+    }
+    if (buffer_.empty()) {
+        buffer_.resize(getBufferSize());
+    }
+    int result = fetchNext(buffer_.data());
+    if (result != RESULT_OK) {
+        return std::nullopt;
+    }
+    auto txShared = transaction_.lock();
+    RowView view(metadata_, buffer_.data(), txShared.get(), this, generation_);
+    return Row(view);
+}
+
+ResultSet::RowsRange ResultSet::rows() {
+    return RowsRange(this);
+}
+
+ResultSet::RowsRange::Iterator::Iterator(ResultSet* rs) : rs_(rs) {
+    advance();
+}
+
+ResultSet::RowsRange::Iterator& ResultSet::RowsRange::Iterator::operator++() {
+    advance();
+    return *this;
+}
+
+void ResultSet::RowsRange::Iterator::advance() {
+    if (!rs_ || !rs_->isValid() || rs_->isEof()) {
+        current_.reset();
+        end_ = true;
+        return;
+    }
+    if (rs_->buffer_.empty()) {
+        rs_->buffer_.resize(rs_->getBufferSize());
+    }
+    int result = rs_->fetchNext(rs_->buffer_.data());
+    if (result != RESULT_OK) {
+        current_.reset();
+        end_ = true;
+        return;
+    }
+    auto txShared = rs_->transaction_.lock();
+    current_.emplace(rs_->metadata_,
+                     rs_->buffer_.data(),
+                     txShared.get(),
+                     rs_,
+                     rs_->generation_);
 }
 
 } // namespace core

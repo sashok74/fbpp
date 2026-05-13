@@ -57,6 +57,10 @@ inline bool isTextBlob(const FieldInfo* field) {
     return field && field->type == SQL_BLOB && field->subType == 1;
 }
 
+inline bool isAnyBlob(const FieldInfo* field) {
+    return field && field->type == SQL_BLOB;
+}
+
 inline unsigned normalize_sql_type(unsigned type) {
     return type & ~1u;
 }
@@ -328,9 +332,12 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
             strValue = value;
         }
 
-        if (isTextBlob(ctx.field)) {
-            std::vector<uint8_t> textData(strValue.begin(), strValue.end());
-            ISC_QUAD blobId = createBlob(ctx.transaction, textData);
+        if (isAnyBlob(ctx.field)) {
+            // String bytes go to BLOB storage as-is. Works for SUB_TYPE TEXT
+            // and SUB_TYPE BINARY (and any other sub-type) — the bytes are
+            // the bytes; caller picks the interpretation via column type.
+            std::vector<uint8_t> blobData(strValue.begin(), strValue.end());
+            ISC_QUAD blobId = createBlob(ctx.transaction, blobData);
             std::memcpy(dataPtr, &blobId, sizeof(ISC_QUAD));
         } else if (ctx.field && (ctx.field->type == SQL_TEXT || ctx.field->type == SQL_VARYING)) {
             if (ctx.field->type == SQL_TEXT) {
@@ -598,8 +605,16 @@ void read_sql_value(const SqlReadContext& ctx, const uint8_t* dataPtr, T& value)
             value = static_cast<double>(raw) / static_cast<double>(factor);
             return;
         }
+        // Plain DOUBLE PRECISION (scale==0): direct memcpy. The if-constexpr
+        // chain below is discarded for ValueType==double, so the final
+        // else-memcpy fallback at the bottom of this function is unreachable
+        // here — we must write the result explicitly.
+        std::memcpy(&value, dataPtr, sizeof(double));
+        return;
     } else if constexpr (std::is_same_v<ValueType, std::string>) {
-        if (isTextBlob(ctx.field) && ctx.transaction) {
+        if (isAnyBlob(ctx.field) && ctx.transaction) {
+            // Any BLOB sub-type loads into std::string as a byte buffer.
+            // Caller decides interpretation (text vs binary).
             ISC_QUAD blobId{};
             std::memcpy(&blobId, dataPtr, sizeof(ISC_QUAD));
             auto blobData = ctx.transaction->loadBlob(&blobId);

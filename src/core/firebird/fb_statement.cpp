@@ -187,14 +187,46 @@ unsigned Statement::getType() const {
     if (!statement_) {
         throw FirebirdException("Statement is not prepared");
     }
-    
+
     if (!metadataLoaded_) {
         auto& st = status();
         type_ = statement_->getType(&st);
         metadataLoaded_ = true;
     }
-    
+
     return type_;
+}
+
+Statement::StatementKind Statement::kind() const {
+    // isc_info_sql_stmt_* constants from <firebird/impl/inf_pub.h>:
+    //   1=select, 2=insert, 3=update, 4=delete, 5=ddl,
+    //   6=get_segment, 7=put_segment (legacy BLOB),
+    //   8=exec_procedure (also EXECUTE BLOCK without RETURNS),
+    //   9=start_trans, 10=commit, 11=rollback,
+    //   12=select_for_upd, 13=set_generator, 14=savepoint.
+    switch (getType()) {
+        case isc_info_sql_stmt_select:
+        case isc_info_sql_stmt_select_for_upd:
+            return StatementKind::Select;
+        case isc_info_sql_stmt_insert:
+        case isc_info_sql_stmt_update:
+        case isc_info_sql_stmt_delete:
+            return StatementKind::Dml;
+        case isc_info_sql_stmt_exec_procedure:
+            return StatementKind::ExecuteProcedure;
+        case isc_info_sql_stmt_ddl:
+            return StatementKind::Ddl;
+        default:
+            return StatementKind::Unknown;
+    }
+}
+
+bool Statement::hasOutput() const {
+    // Firebird returns a valid IMessageMetadata for every prepared
+    // statement; for DML/DDL it just has zero columns. Count > 0 is the
+    // actual "produces a row" signal.
+    auto meta = getOutputMetadata();
+    return meta && meta->getCount() > 0;
 }
 
 unsigned Statement::getFlags() const {

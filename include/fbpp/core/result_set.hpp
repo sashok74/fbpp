@@ -4,6 +4,9 @@
 #include "fbpp/core/message_metadata.hpp"
 #include "fbpp/core/pack_utils.hpp"
 #include "fbpp/core/firebird_compat.hpp"
+#include "fbpp/core/row.hpp"
+#include <cstdint>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -103,12 +106,34 @@ public:
             results.push_back(std::move(record));
         }
     }
-    
+
+    /// Fetch one row as an owning Row, or nullopt at end of result set.
+    /// Throws if the cursor has already been closed. Useful when the
+    /// caller wants to keep the row past cursor lifetime (typical
+    /// EXECUTE PROCEDURE OUT-param consumer).
+    std::optional<Row> fetchOne();
+
+    /// Range of RowView snapshots — for hot loops without per-row copy.
+    /// Each ++iterator overwrites the same internal buffer; the
+    /// previous RowView is invalidated. Copy to Row before keeping.
+    class RowsRange;
+    RowsRange rows();
+
+    /// Generation counter — bumped on every fetchNext / close. RowView
+    /// snapshots its value and uses it for the staleness guard.
+    std::uint64_t generation() const noexcept { return generation_; }
+
     /**
      * @brief Get metadata for result set
      * @return Message metadata
      */
     const MessageMetadata* getMetadata() const { return metadata_.get(); }
+
+    /// Same as getMetadata() but returns shared ownership for callers
+    /// that want to keep metadata alive past the ResultSet (used by Row).
+    std::shared_ptr<const MessageMetadata> getSharedMetadata() const noexcept {
+        return metadata_;
+    }
     
     /**
      * @brief Get message buffer size
@@ -239,14 +264,67 @@ private:
 private:
     Environment& env_;
     Firebird::IResultSet* resultSet_ = nullptr;
-    std::unique_ptr<MessageMetadata> metadata_;
+    // Shared so that Row owning copies can outlive the ResultSet.
+    std::shared_ptr<const MessageMetadata> metadata_;
     std::weak_ptr<Transaction> transaction_;  // Weak reference to transaction
     Firebird::IStatus* status_;
     mutable Firebird::ThrowStatusWrapper statusWrapper_{nullptr};
     bool eof_ = false;
-    
+
     // Buffer for fetching (allocated on demand)
     mutable std::vector<uint8_t> buffer_;
+
+    // Bumped on each successful fetchNext and on close(). Used by
+    // RowView for the staleness guard.
+    std::uint64_t generation_ = 0;
+};
+
+/// Range adapter for `for (const auto& v : cursor->rows())`. Constructs
+/// transient RowView snapshots over the cursor's internal buffer. Each
+/// ++iterator overwrites that buffer — the previous RowView becomes
+/// stale; copy to Row before keeping.
+class ResultSet::RowsRange {
+public:
+    class Iterator {
+    public:
+        using iterator_category = std::input_iterator_tag;
+        using value_type        = RowView;
+        using difference_type   = std::ptrdiff_t;
+        using pointer           = const RowView*;
+        using reference         = const RowView&;
+
+        Iterator() noexcept : end_(true) {}
+        explicit Iterator(ResultSet* rs);
+
+        Iterator& operator++();
+        // postfix is intentionally not provided for an input iterator
+        // over a single-buffer source — copying the iterator would be
+        // a use-after-fetch trap.
+
+        reference operator*() const { return *current_; }
+        pointer   operator->() const { return &*current_; }
+
+        bool operator==(const Iterator& other) const noexcept {
+            return end_ == other.end_;
+        }
+        bool operator!=(const Iterator& other) const noexcept {
+            return !(*this == other);
+        }
+
+    private:
+        void advance();
+
+        ResultSet* rs_ = nullptr;
+        std::optional<RowView> current_;
+        bool end_ = false;
+    };
+
+    explicit RowsRange(ResultSet* rs) noexcept : rs_(rs) {}
+    Iterator begin() { return Iterator(rs_); }
+    Iterator end() noexcept   { return Iterator{}; }
+
+private:
+    ResultSet* rs_;
 };
 
 } // namespace core

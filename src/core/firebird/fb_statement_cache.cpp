@@ -470,10 +470,7 @@ void StatementCache::extractMetadata(Statement* statement, CachedStatement& entr
             for (unsigned i = 0; i < count; i++) {
                 ParamInfo param;
                 auto fieldInfo = outputMeta->getField(i);
-                param.name = fieldInfo.alias;  // Use alias if available
-                if (param.name.empty()) {
-                    param.name = fieldInfo.name;
-                }
+                param.name = displayName(fieldInfo);
                 param.sqlType = fieldInfo.type;
                 param.length = fieldInfo.length;
                 param.scale = fieldInfo.scale;

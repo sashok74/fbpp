@@ -44,6 +44,7 @@ add_library(fbpp_core STATIC
     src/core/firebird/fb_named_param_parser.cpp
     src/core/firebird/fb_message_metadata.cpp
     src/core/firebird/fb_result_set.cpp
+    src/core/firebird/fb_row.cpp
     src/core/firebird/fb_message_builder.cpp
     src/core/firebird/fb_exception.cpp
     src/core/firebird/fb_extended_types.cpp
@@ -236,6 +237,7 @@ install(FILES
 
 install(FILES
     include/fbpp_util/trace.h
+    include/fbpp_util/tdatetime.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fbpp_util
     COMPONENT core
 )

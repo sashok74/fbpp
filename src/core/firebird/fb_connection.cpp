@@ -7,6 +7,7 @@
 #include "fbpp/core/detail/firebird_raii.hpp"
 #include "fbpp_util/trace.h"
 #include <stdexcept>
+#include <tuple>
 
 namespace fbpp {
 namespace core {
@@ -448,22 +449,18 @@ std::shared_ptr<Statement> Connection::prepareStatement(const std::string& sql, 
     return statementCache_->get(this, sql, flags);
 }
 
-Connection::QueryMetadataInfo Connection::describeQuery(const std::string& sql) {
+std::shared_ptr<Statement> Connection::prepareStatementUncached(
+    const std::string& sql, unsigned flags) {
     if (!attachment_) {
         throw FirebirdException("Not connected to database");
     }
 
-    QueryMetadataInfo info;
-
     auto parseResult = NamedParamParser::parse(sql);
-    const std::string& actualSql = parseResult.hasNamedParams ? parseResult.convertedSql : sql;
+    const std::string& actualSql =
+        parseResult.hasNamedParams ? parseResult.convertedSql : sql;
 
-    auto& env = Environment::getInstance();
-    //Firebird::IStatus* raw = env.getMaster()->getStatus();
-    //Firebird::ThrowStatusWrapper st(raw);
-
-    Firebird::IStatement* rawStmt = nullptr;
     auto tra = StartTransaction();
+    Firebird::IStatement* rawStmt = nullptr;
     try {
         rawStmt = attachment_->prepare(
             &status(),
@@ -471,58 +468,284 @@ Connection::QueryMetadataInfo Connection::describeQuery(const std::string& sql) 
             0,
             actualSql.c_str(),
             3,
-            Statement::PREPARE_PREFETCH_ALL);
+            flags);
     } catch (const Firebird::FbException& e) {
-        //st.dispose();
         throw FirebirdException(e);
     }
-    //st.dispose();
     tra->Commit();
 
     if (!rawStmt) {
-        throw FirebirdException("Failed to prepare statement for metadata inspection");
+        throw FirebirdException("Failed to prepare statement");
     }
 
-    struct StatementGuard {
-        Connection* conn;
-        Firebird::IStatement* stmt;
-        ~StatementGuard() {
-            if (stmt) {
-                auto& st = conn->status();
-                try {
-                    stmt->free(&st);
-                    stmt->release();
-                } catch (...) {
-                    // ignore cleanup errors
-                }
-            }
-        }
-    } guard{this, rawStmt};
+    auto stmt = std::make_shared<Statement>(rawStmt, this);
+    if (parseResult.hasNamedParams) {
+        stmt->setNamedParamMapping(parseResult.nameToPositions, true);
+    }
+    return stmt;
+}
 
-    try {
-        Firebird::IMessageMetadata* inMetaRaw = rawStmt->getInputMetadata(&status());
-        if (inMetaRaw) {
-            MessageMetadata inputWrapper(inMetaRaw);
-            unsigned count = inputWrapper.getCount();
-            info.inputFields.reserve(count);
-            for (unsigned i = 0; i < count; ++i) {
-                info.inputFields.emplace_back(inputWrapper.getField(i));
-            }
-        }
+Connection::QueryMetadataInfo Connection::describeQuery(const std::string& sql) {
+    QueryMetadataInfo info;
 
-        Firebird::IMessageMetadata* outMetaRaw = rawStmt->getOutputMetadata(&status());
-        if (outMetaRaw) {
-            MessageMetadata outputWrapper(outMetaRaw);
-            unsigned count = outputWrapper.getCount();
-            info.outputFields.reserve(count);
-            for (unsigned i = 0; i < count; ++i) {
-                info.outputFields.emplace_back(outputWrapper.getField(i));
-            }
+    // Single raw-prepare path: prepareStatementUncached. Statement's
+    // destructor releases the underlying IStatement when the local
+    // shared_ptr goes out of scope.
+    auto stmt = prepareStatementUncached(sql);
+
+    auto inMeta = stmt->getInputMetadata();
+    if (inMeta) {
+        const unsigned n = inMeta->getCount();
+        info.inputFields.reserve(n);
+        for (unsigned i = 0; i < n; ++i) {
+            info.inputFields.emplace_back(inMeta->getField(i));
         }
-    } catch (const Firebird::FbException& e) {
-        throw FirebirdException(e);
     }
 
+    auto outMeta = stmt->getOutputMetadata();
+    if (outMeta) {
+        const unsigned n = outMeta->getCount();
+        info.outputFields.reserve(n);
+        for (unsigned i = 0; i < n; ++i) {
+            info.outputFields.emplace_back(outMeta->getField(i));
+        }
+    }
+
+    return info;
+}
+
+// ---------------------------------------------------------------------------
+// Engine version probe
+// ---------------------------------------------------------------------------
+
+int Connection::getEngineMajorVersion() const {
+    if (engineMajor_ != 0) {
+        return engineMajor_;
+    }
+    if (!attachment_) {
+        throw FirebirdException("Not connected to database");
+    }
+
+    // Self-call: this method is logically const but populates the cache.
+    // The cast keeps the public API const without dragging mutable into
+    // the connection-machinery side of things.
+    auto* self = const_cast<Connection*>(this);
+    auto stmt = self->prepareStatementUncached(
+        "SELECT RDB$GET_CONTEXT('SYSTEM', 'ENGINE_VERSION') "
+        "FROM RDB$DATABASE");
+    auto tx = self->StartTransaction();
+    auto cur = tx->openCursor(stmt);
+    std::tuple<std::string> row;
+    int major = 0;
+    if (cur->fetch(row)) {
+        const auto& ver = std::get<0>(row);
+        // ENGINE_VERSION format is "M.m.r.b" (e.g., "5.0.0.1306"). Take
+        // the integer prefix before the first '.'.
+        try {
+            major = std::stoi(ver);
+        } catch (...) {
+            major = 0;
+        }
+    }
+    tx->Commit();
+
+    engineMajor_ = major;
+    return engineMajor_;
+}
+
+// ---------------------------------------------------------------------------
+// Procedure metadata
+// ---------------------------------------------------------------------------
+//
+// Two-step strategy:
+//   listProcedures()       reads RDB$PROCEDURES alone (cheap, one cursor).
+//   describeProcedure()    additionally reads RDB$PROCEDURE_PARAMETERS for
+//                          parameter names + directions, then renders a
+//                          probe SQL ("EXECUTE PROCEDURE ..." or
+//                          "SELECT * FROM ...") and feeds it through
+//                          prepareStatementUncached so FieldInfo for each
+//                          parameter comes from the same machinery as
+//                          describeQuery.
+namespace {
+
+std::string trimAscii(std::string s) {
+    while (!s.empty() && (s.back() == ' ' || s.back() == '\0')) s.pop_back();
+    size_t b = 0;
+    while (b < s.size() && s[b] == ' ') ++b;
+    return s.substr(b);
+}
+
+std::string renderProbeSql(const ProcedureInfo& info, unsigned inputCount) {
+    // Quote identifiers so case-sensitive procedure names round-trip.
+    auto quote = [](const std::string& id) {
+        return "\"" + id + "\"";
+    };
+    std::string qualified;
+    if (!info.packageName.empty()) {
+        qualified = quote(info.packageName) + "." + quote(info.name);
+    } else {
+        qualified = quote(info.name);
+    }
+
+    std::string args;
+    if (inputCount > 0) {
+        args = "(";
+        for (unsigned i = 0; i < inputCount; ++i) {
+            if (i > 0) args += ',';
+            args += '?';
+        }
+        args += ")";
+    }
+
+    if (info.kind == ProcedureKind::Selectable) {
+        return "SELECT * FROM " + qualified + args;
+    }
+    return "EXECUTE PROCEDURE " + qualified + args;
+}
+
+} // namespace
+
+std::vector<ProcedureInfo> Connection::listProcedures() {
+    if (!attachment_) {
+        throw FirebirdException("Not connected to database");
+    }
+
+    // FB 3+ has RDB$PACKAGE_NAME; on FB 2.5 the column is absent. We
+    // assume FB 3+ here (CLAUDE.md targets FB 5).
+    const std::string sql =
+        "SELECT TRIM(P.RDB$PROCEDURE_NAME),"
+        "       COALESCE(TRIM(P.RDB$PACKAGE_NAME), ''),"
+        "       COALESCE(P.RDB$PROCEDURE_TYPE, 0) "
+        "FROM RDB$PROCEDURES P "
+        "WHERE COALESCE(P.RDB$SYSTEM_FLAG, 0) = 0 "
+        "ORDER BY P.RDB$PACKAGE_NAME, P.RDB$PROCEDURE_NAME";
+
+    auto stmt = prepareStatementUncached(sql);
+    auto tx = StartTransaction();
+    auto cur = tx->openCursor(stmt);
+
+    std::vector<ProcedureInfo> out;
+    std::tuple<std::string, std::string, int16_t> row;
+    while (cur->fetch(row)) {
+        ProcedureInfo info;
+        info.name        = trimAscii(std::get<0>(row));
+        info.packageName = trimAscii(std::get<1>(row));
+        switch (std::get<2>(row)) {
+            case 1: info.kind = ProcedureKind::Selectable;  break;
+            case 2: info.kind = ProcedureKind::Executable;  break;
+            default: info.kind = ProcedureKind::Unknown;    break;
+        }
+        out.push_back(std::move(info));
+    }
+    tx->Commit();
+    return out;
+}
+
+ProcedureInfo Connection::describeProcedure(const std::string& name,
+                                            const std::string& packageName) {
+    if (!attachment_) {
+        throw FirebirdException("Not connected to database");
+    }
+
+    // Fetch header row first.
+    const std::string headerSql =
+        "SELECT COALESCE(P.RDB$PROCEDURE_TYPE, 0),"
+        "       COALESCE(P.RDB$PROCEDURE_INPUTS, 0),"
+        "       COALESCE(P.RDB$PROCEDURE_OUTPUTS, 0) "
+        "FROM RDB$PROCEDURES P "
+        "WHERE P.RDB$PROCEDURE_NAME = ? "
+        "  AND COALESCE(P.RDB$PACKAGE_NAME, '') = ?";
+
+    auto headerStmt = prepareStatementUncached(headerSql);
+    auto tx = StartTransaction();
+
+    int16_t procType = 0;
+    int16_t inputCount = 0;
+    int16_t outputCount = 0;
+    {
+        auto cur = tx->openCursor(headerStmt,
+            std::make_tuple(name, packageName));
+        std::tuple<int16_t, int16_t, int16_t> hdr;
+        if (!cur->fetch(hdr)) {
+            tx->Commit();
+            throw FirebirdException("Procedure not found: " +
+                (packageName.empty() ? name : packageName + "." + name));
+        }
+        procType    = std::get<0>(hdr);
+        inputCount  = std::get<1>(hdr);
+        outputCount = std::get<2>(hdr);
+    }
+
+    ProcedureInfo info;
+    info.name        = name;
+    info.packageName = packageName;
+    switch (procType) {
+        case 1: info.kind = ProcedureKind::Selectable;  break;
+        case 2: info.kind = ProcedureKind::Executable;  break;
+        default: info.kind = ProcedureKind::Unknown;    break;
+    }
+
+    // Fetch parameter NAMES + DIRECTIONS from RDB$PROCEDURE_PARAMETERS.
+    // RDB$PARAMETER_TYPE: 0=input, 1=output.
+    // RDB$PARAMETER_NUMBER: position within direction.
+    const std::string paramsSql =
+        "SELECT TRIM(PP.RDB$PARAMETER_NAME),"
+        "       PP.RDB$PARAMETER_TYPE,"
+        "       PP.RDB$PARAMETER_NUMBER "
+        "FROM RDB$PROCEDURE_PARAMETERS PP "
+        "WHERE PP.RDB$PROCEDURE_NAME = ? "
+        "  AND COALESCE(PP.RDB$PACKAGE_NAME, '') = ? "
+        "ORDER BY PP.RDB$PARAMETER_TYPE, PP.RDB$PARAMETER_NUMBER";
+
+    std::vector<std::string> inputNames(inputCount);
+    std::vector<std::string> outputNames(outputCount);
+    {
+        auto pStmt = prepareStatementUncached(paramsSql);
+        auto cur = tx->openCursor(pStmt,
+            std::make_tuple(name, packageName));
+        std::tuple<std::string, int16_t, int16_t> row;
+        while (cur->fetch(row)) {
+            const std::string pname = trimAscii(std::get<0>(row));
+            const int16_t dir = std::get<1>(row);
+            const int16_t pos = std::get<2>(row);
+            if (dir == 0 && pos < inputCount)  inputNames [pos] = pname;
+            if (dir == 1 && pos < outputCount) outputNames[pos] = pname;
+        }
+    }
+    tx->Commit();
+
+    // Probe prepare to get FieldInfo per parameter — same machinery as
+    // describeQuery, so type/scale/length match what a real call would see.
+    // Strict-fail by default: if the probe cannot be built (permissions,
+    // FB version quirk, malformed SQL render) we let the FirebirdException
+    // propagate. A "best-effort" mode without per-param FieldInfo would
+    // make Phase 0 manifest CI silently green on incomplete metadata —
+    // unsafe. Callers that genuinely want soft-mode should catch
+    // FirebirdException themselves and fall back to listProcedures().
+    QueryMetadataInfo probe = describeQuery(
+        renderProbeSql(info, static_cast<unsigned>(inputCount)));
+
+    info.params.reserve(probe.inputFields.size() + probe.outputFields.size());
+    for (size_t i = 0; i < probe.inputFields.size(); ++i) {
+        ProcedureParamInfo p;
+        p.procedureName = name;
+        p.packageName   = packageName;
+        p.name          = (i < inputNames.size()) ? inputNames[i] : "";
+        p.direction     = ParamDirection::Input;
+        p.field         = probe.inputFields[i];
+        p.position      = static_cast<unsigned>(i);
+        info.params.push_back(std::move(p));
+    }
+    for (size_t i = 0; i < probe.outputFields.size(); ++i) {
+        ProcedureParamInfo p;
+        p.procedureName = name;
+        p.packageName   = packageName;
+        p.name          = (i < outputNames.size()) ? outputNames[i] : "";
+        p.direction     = ParamDirection::Output;
+        p.field         = probe.outputFields[i];
+        p.position      = static_cast<unsigned>(i);
+        info.params.push_back(std::move(p));
+    }
     return info;
 }
 

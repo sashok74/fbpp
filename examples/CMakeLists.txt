@@ -13,6 +13,7 @@ set(EXAMPLE_SOURCES
     06_named_parameters.cpp     # Named parameters support demonstration
     07_cancel_operation.cpp     # Multi-threaded cancelOperation() API demonstration
     07_cancel_test_variants.cpp  # Test transaction memory leak
+    10_param_binder.cpp         # Typed name-based ParamBinder demonstration
     test_prepare_transaction.cpp   # Test if prepare needs transaction
     test_statement_free.cpp      # Test statement free/release behavior
     test_statement_refcount.cpp  # Test statement reference counting leak

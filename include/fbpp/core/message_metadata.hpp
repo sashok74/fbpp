@@ -10,13 +10,28 @@ namespace fbpp {
 namespace core {
 
 /**
- * @brief Field information in a message
+ * @brief Field information in a message.
+ *
+ * Two name fields are exposed: `name` (provenance — origin column from server)
+ * and `alias` (identity — what user wrote in SQL). For user-facing identification
+ * always prefer `alias` with `name` as fallback; the free function
+ * `displayName(field)` and `MessageMetadata::getDisplayName(index)` encode this
+ * canonical convention. Using `name` directly causes collisions for literal
+ * columns: `SELECT 0 AS x, 0 AS y` returns `name == "CONSTANT"` for both.
  */
 struct FieldInfo {
-    std::string name;        // Field name
-    std::string relation;    // Table name
-    std::string owner;       // Owner name
-    std::string alias;       // Field alias
+    /// Raw column origin from server (provenance). For literals returns
+    /// "CONSTANT"; for some derived columns may be empty. NOT a user-facing
+    /// identifier — use displayName(field) or MessageMetadata::getDisplayName(index)
+    /// for that. Bypassing this advice causes name collisions in caller-side maps.
+    std::string name;
+    std::string relation;    // Table name (provenance)
+    std::string owner;       // Owner name (provenance)
+    /// User-supplied identity from SQL. For column reference without AS
+    /// equals the column name; for `expr AS foo` equals "FOO" (Firebird
+    /// uppercases unquoted identifiers); for `expr AS "Foo"` equals "Foo".
+    /// May be empty for unaliased expressions / aggregates.
+    std::string alias;
     unsigned type;           // SQL type code
     bool nullable;           // Can be NULL
     unsigned subType;        // Subtype (for BLOB, etc.)
@@ -26,6 +41,17 @@ struct FieldInfo {
     unsigned offset;         // Offset in message buffer
     unsigned nullOffset;     // Null indicator offset
 };
+
+/**
+ * @brief Canonical user-facing identifier for a field.
+ *
+ * Returns alias when non-empty, otherwise falls back to name. This is the
+ * single source of truth for "what does the caller call this column" — used
+ * by JSON output, statement cache, and any client building name→value maps.
+ */
+inline const std::string& displayName(const FieldInfo& f) noexcept {
+    return f.alias.empty() ? f.name : f.alias;
+}
 
 /**
  * @brief Wrapper for Firebird IMessageMetadata interface
@@ -63,21 +89,36 @@ public:
     FieldInfo getField(unsigned index) const;
     
     /**
-     * @brief Get field information by name
-     * @param name Field name
+     * @brief Get field information by name (matches against name OR alias).
+     *
+     * Two-pass lookup:
+     *   1. Exact match against raw `name` and `alias` — preserves correctness
+     *      for quoted identifiers (`SELECT col AS "MyCol"`).
+     *   2. Case-insensitive ASCII match with whitespace trim — handles the
+     *      common case where Firebird stores unquoted identifiers UPPERCASE
+     *      while clients write them in lower/mixed case, and accommodates
+     *      trailing/leading padding (e.g. VCL TStringField names).
+     *
+     * If multiple fields satisfy the same pass, the first by index is returned.
+     *
+     * @param name Field name (raw or case-insensitive with whitespace)
      * @return Field information or nullopt if not found
      */
     std::optional<FieldInfo> getField(const std::string& name) const;
-    
+
     /**
      * @brief Get all fields information
      * @return Vector of field information
      */
     std::vector<FieldInfo> getFields() const;
-    
+
     /**
-     * @brief Get field index by name
-     * @param name Field name
+     * @brief Get field index by name (matches against name OR alias).
+     *
+     * Same lookup semantics as getField(name) — exact pass first, then
+     * case-insensitive ASCII match with whitespace trim. First by index wins.
+     *
+     * @param name Field name (raw or case-insensitive with whitespace)
      * @return Field index or nullopt if not found
      */
     std::optional<unsigned> getIndex(const std::string& name) const;
@@ -165,7 +206,22 @@ public:
      * @return Field alias or empty string
      */
     std::string getAlias(unsigned index) const;
-    
+
+    /**
+     * @brief Get user-facing identifier for a field (alias, falling back to name).
+     *
+     * Preferred over getFieldName() / getAlias() for callers building
+     * column→value maps, JSON output, or VCL FieldDefs. Avoids the literal
+     * collision pitfall (`SELECT 0 AS x, 0 AS y` returns name == "CONSTANT"
+     * for both, but distinct aliases).
+     *
+     * Equivalent to displayName(getField(index)) but skips the FieldInfo copy.
+     *
+     * @param index Field index
+     * @return Alias if non-empty, otherwise name
+     */
+    std::string getDisplayName(unsigned index) const;
+
     /**
      * @brief Get total message length in bytes
      * @return Message buffer size
@@ -226,8 +282,12 @@ private:
     
     // Cached field information (lazy-loaded)
     mutable std::vector<FieldInfo> fields_;
+    // Pre-computed UPPERCASE forms of fields_[i].name and .alias for case-
+    // insensitive lookup. Populated together with fields_ in loadFields().
+    mutable std::vector<std::string> name_upper_;
+    mutable std::vector<std::string> alias_upper_;
     mutable bool fieldsLoaded_ = false;
-    
+
     void loadFields() const;
 };
 

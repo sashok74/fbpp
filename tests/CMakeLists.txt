@@ -357,11 +357,199 @@ target_link_libraries(test_struct_descriptor PRIVATE
 
 gtest_discover_tests(test_struct_descriptor)
 
+# Connection: prepareStatementUncached + describeQuery refactor
+add_executable(test_prepare_uncached
+    unit/test_prepare_uncached.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_prepare_uncached PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_prepare_uncached)
+
+# Connection: getEngineMajorVersion()
+add_executable(test_fb_version_gating
+    unit/test_fb_version_gating.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_fb_version_gating PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_fb_version_gating)
+
+# Connection: listProcedures() / describeProcedure()
+add_executable(test_procedure_metadata
+    unit/test_procedure_metadata.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_procedure_metadata PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_procedure_metadata)
+
+# Row runtime API: RowView (non-owning, transient)
+add_executable(test_row_view
+    unit/test_row_view.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_row_view PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_row_view)
+
+# Row runtime API: Row (owning copy that survives cursor close)
+add_executable(test_row_owning
+    unit/test_row_owning.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_row_owning PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_row_owning)
+
+# ResultSet::rows() / fetchOne() / generation tests
+add_executable(test_result_set_rows
+    unit/test_result_set_rows.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_result_set_rows PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_result_set_rows)
+
+# Transaction::createBlob(subType) BLOB sub-type tests
+add_executable(test_blob_subtype
+    unit/test_blob_subtype.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_blob_subtype PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_blob_subtype)
+
+# Statement kind() / hasOutput() semantic API tests
+add_executable(test_statement_kind
+    unit/test_statement_kind.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_statement_kind PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_statement_kind)
+
+# MessageMetadata identity + case-fold lookup tests
+add_executable(test_message_metadata
+    unit/test_message_metadata.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_message_metadata PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_message_metadata)
+
+# ParamBinder test (typed name-based binding)
+add_executable(test_param_binder
+    unit/test_param_binder.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_param_binder PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_param_binder)
+
+# ParamBinder optional/nullopt overload tests
+add_executable(test_param_binder_optional
+    unit/test_param_binder_optional.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_param_binder_optional PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_param_binder_optional)
+
 # Basic infrastructure tests
 set(BASIC_TEST_SOURCES
     unit/test_trace.cpp
     unit/test_fbclient_symbols.cpp
     unit/test_timestamp_utils.cpp
+    unit/test_tdatetime.cpp
 )
 
 add_executable(test_config

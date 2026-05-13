@@ -66,6 +66,26 @@ public:
         CURSOR_TYPE_SCROLLABLE = Firebird::IStatement::CURSOR_TYPE_SCROLLABLE
     };
 
+    /**
+     * @brief Semantic statement classification.
+     *
+     * Wraps the raw isc_info_sql_stmt_* code returned by getType() in a
+     * stable, switch-friendly enum. Use kind() / hasOutput() to choose
+     * execute() vs openCursor() at the call site rather than parsing SQL
+     * text or relying on procedure-name conventions like _S/_IU.
+     *
+     * EXECUTE BLOCK is reported by Firebird as Select when it has output
+     * (RETURNS ... SUSPEND), or as ExecuteProcedure otherwise — there is
+     * no separate "Block" kind because the engine has no separate code.
+     */
+    enum class StatementKind {
+        Select,            // SELECT (incl. SELECT FOR UPDATE) and EXECUTE BLOCK with output
+        Dml,               // INSERT / UPDATE / DELETE / MERGE
+        ExecuteProcedure,  // EXECUTE PROCEDURE without output, EXECUTE BLOCK without output
+        Ddl,               // CREATE / ALTER / DROP / GRANT / REVOKE
+        Unknown            // SAVEPOINT, SET GENERATOR, START/COMMIT/ROLLBACK
+    };
+
 public:
     // Constructors
     Statement(Firebird::IStatement* stmt, Connection* connection);
@@ -83,10 +103,39 @@ public:
 
     /**
      * @brief Get statement type (SELECT, INSERT, UPDATE, DELETE, etc.)
-     * @return Statement type code
+     * @return Raw isc_info_sql_stmt_* code from Firebird (1=select,
+     *         2=insert, 3=update, 4=delete, 5=ddl, 8=exec_procedure, …).
+     *         Prefer kind() for switch-on semantics.
      */
     unsigned getType() const;
-    
+
+    /**
+     * @brief Semantic classification of this statement.
+     * @see StatementKind
+     */
+    StatementKind kind() const;
+
+    /**
+     * @brief True iff this statement produces output data (row set or
+     *        single row of OUT params).
+     *
+     * Equivalent to "output metadata has at least one column".
+     *
+     * **Do NOT use as the sole signal to choose openCursor vs execute** —
+     * EXECUTE PROCEDURE with OUT params is hasOutput()==true but must be
+     * run via execute() (single OUT row), not openCursor(). Likewise
+     * INSERT/UPDATE ... RETURNING is hasOutput()==true but kind() is
+     * Dml or ExecuteProcedure (FB reports it as exec_procedure).
+     *
+     * The correct dispatch is by kind():
+     *   StatementKind::Select            → openCursor()
+     *   StatementKind::ExecuteProcedure  → execute() (use hasOutput() to
+     *                                                 know whether to
+     *                                                 read OUT params)
+     *   StatementKind::Dml / Ddl         → execute()
+     */
+    bool hasOutput() const;
+
     /**
      * @brief Get statement flags
      * @return Statement flags
@@ -529,3 +578,7 @@ std::unique_ptr<ResultSet> Statement::openCursor(std::shared_ptr<Transaction> tr
 // Include template implementations for Transaction methods
 // This must be at the very end after both Transaction and Statement are fully defined
 #include "fbpp/core/transaction_templates.hpp"
+
+// Typed name-based parameter binder. Brings in inline definitions of
+// Transaction::execute / openCursor overloads taking const ParamBinder&.
+#include "fbpp/core/param_binder.hpp"

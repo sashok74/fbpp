@@ -219,7 +219,7 @@ std::vector<uint8_t> Transaction::loadBlob(ISC_QUAD* blobId) {
     }
 }
 
-ISC_QUAD Transaction::createBlob(const std::vector<uint8_t>& data) {
+ISC_QUAD Transaction::createBlob(const std::vector<uint8_t>& data, int subType) {
     if (!active_ || !transaction_) {
         throw FirebirdException("Transaction is not active");
     }
@@ -231,9 +231,24 @@ ISC_QUAD Transaction::createBlob(const std::vector<uint8_t>& data) {
         ISC_QUAD blobId;
         std::memset(&blobId, 0, sizeof(ISC_QUAD));
 
+        // Build BPB only when caller wants a non-default subType. Layout
+        // (per Firebird docs): version byte, then tag/length/value triplets.
+        // For target_type we use a 2-byte little-endian value, which covers
+        // the full int16_t range Firebird uses for sub-types.
+        unsigned char bpb[5];
+        unsigned bpbLen = 0;
+        if (subType != 0) {
+            bpb[0] = isc_bpb_version1;
+            bpb[1] = isc_bpb_target_type;
+            bpb[2] = 2;
+            bpb[3] = static_cast<unsigned char>(subType & 0xFF);
+            bpb[4] = static_cast<unsigned char>((subType >> 8) & 0xFF);
+            bpbLen = 5;
+        }
+
         // Create new BLOB. RAII guard ensures close()+release() on any throw path.
         detail::BlobGuard blob(
-            attachment->createBlob(&st, transaction_, &blobId, 0, nullptr),
+            attachment->createBlob(&st, transaction_, &blobId, bpbLen, bpbLen ? bpb : nullptr),
             &st);
         if (!blob) {
             throw FirebirdException("Failed to create BLOB");

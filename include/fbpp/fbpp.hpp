@@ -29,3 +29,6 @@
 
 // Template implementations (must be after statement.hpp)
 #include "fbpp/core/transaction_impl.hpp"
+
+// Typed named-parameter binder (must be after statement.hpp)
+#include "fbpp/core/param_binder.hpp"
