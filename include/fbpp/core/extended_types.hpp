@@ -255,7 +255,13 @@ private:
     int16_t offset_;      // Offset from UTC in minutes
 };
 
-#if FBPP_EXTENDED_TYPES_CPLUSPLUS >= 202002L
+// std::chrono::zoned_time / time_zone require a C++20 stdlib with the
+// timezone-database additions (__cpp_lib_chrono >= 201907L). The C++20
+// language alone isn't enough — e.g. older mingw-w64 libstdc++ shipped
+// with bcc64x clang in RAD Studio 13 implements the C++20 language but
+// not the timezone library.
+#if FBPP_EXTENDED_TYPES_CPLUSPLUS >= 202002L && \
+    defined(__cpp_lib_chrono) && (__cpp_lib_chrono >= 201907L)
 /**
  * @brief User-facing C++20 type for Firebird TIMESTAMP WITH TIME ZONE
  *
