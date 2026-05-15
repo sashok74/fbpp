@@ -104,6 +104,59 @@ loadIntoMemTable(Memtableeh::TMemTableEh* mt,
     return n;
 }
 
+// NOTE on attempted typed fast path (2026-05-15, reverted):
+//
+// We attempted a `loadIntoMemTableTyped` variant that bypassed the
+// `rec->Value[i][dvvValueEh] = v` property setter by writing directly to
+// the protected `TMemoryRecordEh::Data[i]` (via crack class) and dispatched
+// by RadColumnKind for primitive types. The hypothesis was 10-15% speedup
+// on numeric payloads.
+//
+// Result: NO measurable gain. Storage is `TRecDataValues = array of Variant`
+// (MemTableDataEh.pas:648,672,705) by design — Variant slot assignment IS
+// the canonical write. `SetDataValue → DataVarCast(VarCast)` for same-type
+// Variants reduces to ~memcpy(16-byte TVarData), comparable to direct
+// `data[i] = Variant`. The architectural ceiling of EhLib's Variant-cell
+// storage applies equally to both paths.
+//
+// FireDAC's TFDDatSRow uses typed packed byte buffers with field offsets
+// (FireDAC.DatS.pas:3974, 10807) — that's why it's faster on bulk load,
+// but it's a different storage backend, not reachable from TMemTableEh.
+//
+// Code removed; this comment preserved as institutional memory.
+// See doc/benchmark_results.md (2026-05-15 section) for full analysis.
+//
+// -------------------------------------------------------------------------
+// Future optimization directions (do NOT chase the setter again):
+//
+//   1. EndUpdate / view rebuild cost. RecordsList.EndUpdate triggers
+//      TRecordsViewEh.RefreshFilteredRecsList (MemTableDataEh.pas) which
+//      runs O(N) sort+filter+TMemRecViewEh alloc even when Filtered=false
+//      and IndexFieldNames=''. For very large rowsets this can dominate
+//      the per-row work — measure it separately before optimizing.
+//
+//   2. Disable UI/index/sort/filter/aggregates during load. Caller hints:
+//      - `mt->DisableControls()` / `EnableControls()` around the load
+//      - clear `IndexFieldNames`/`SortMarkers`/aggregates temporarily
+//      - detach grid DataSource if attached
+//      These suppress notifications that fire after EndUpdate.
+//
+//   3. Reuse existing records on refresh. For repeated loads with the
+//      same schema, walk RecordsList[i] and overwrite Data[i] cells in
+//      place; only Add/Delete the count delta. Saves TMemoryRecordEh
+//      object allocation, SetLength(FData), and InitRecord (VarSetNull).
+//      Not provided by EhLib's DataDriverEh — would need a custom helper.
+//
+//   4. Compile-time-typed fetch for known schemas. Use
+//      fbpp::core::ResultSet::fetch<Tuple> + typed TField setters per
+//      RadColumnKind — applies only where Output schema is known at
+//      compile time. This is the path the historical MemLoadBigBenchTyped
+//      took for its measured ~10% gain.
+//
+//   5. Replace TMemTableEh with TFDMemTable in hot-path transit buffers
+//      (FireDAC's typed packed storage). Architectural change, ~2× perf
+//      on bulk load — not interchangeable with TMemTableEh in UI binding.
+
 } // namespace fbpp::ext
 
 #endif // FBPP_WITH_RAD_DATASET && FBPP_WITH_EHLIB
