@@ -13,11 +13,20 @@ Modern, type-safe C++20 wrapper for Firebird 5 database OO API with full support
 - **Multiple Data Formats** - JSON, tuples, and strongly-typed objects
 - **High Performance** - Statement caching and batch operations
 - **Developer Friendly** - Named parameters and RAII resource management
+- **Schema-Aware Tooling** - public query analysis, type mapping, and read-only schema inspection
 - **Well Tested** - Comprehensive automated test suite
 
 ## Quick Start
 
-Use the canonical guide [doc/fbpp.md](doc/fbpp.md) for the current runtime model, type mapping rules, and query generator workflow.
+Use the canonical guide [doc/fbpp.md](doc/fbpp.md) for the current runtime model, schema inspection layer, type mapping rules, and query generator workflow.
+
+## Components
+
+- `core` - runtime wrapper, statements, transactions, batch, pack/unpack, extended types
+- `schema` - query analysis, type mapping, and read-only schema introspection
+- `codegen` - typed query header generation and `query_generator`
+
+`find_package(fbpp CONFIG REQUIRED)` loads `core` by default. Use `COMPONENTS schema` or `COMPONENTS codegen` for opt-in tooling layers; `codegen` pulls `schema` transitively.
 
 For concrete up-to-date code, start with:
 
