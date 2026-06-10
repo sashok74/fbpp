@@ -90,18 +90,22 @@ int ResultSet::fetchNext(void* buffer) {
         return RESULT_NO_DATA;
     }
 
-    auto& st = status();
+    try {
+        auto& st = status();
 
-    int result = resultSet_->fetchNext(&st, buffer);
+        int result = resultSet_->fetchNext(&st, buffer);
 
-    if (result == RESULT_NO_DATA) {
-        eof_ = true;
-    } else if (result == RESULT_OK) {
-        // Each successful fetch invalidates any outstanding RowView snapshots.
-        ++generation_;
+        if (result == RESULT_NO_DATA) {
+            eof_ = true;
+        } else if (result == RESULT_OK) {
+            // Each successful fetch invalidates any outstanding RowView snapshots.
+            ++generation_;
+        }
+
+        return result;
+    } catch (const Firebird::FbException& e) {
+        throw FirebirdException(e);
     }
-
-    return result;
 }
 
 unsigned ResultSet::getBufferSize() const {
@@ -114,9 +118,19 @@ unsigned ResultSet::getBufferSize() const {
 
 void ResultSet::close() {
     if (resultSet_) {
-        auto& st = status();
-
-        resultSet_->close(&st);
+        // Release and null the interface on ALL paths: if close() throws and
+        // the pointer survived, the destructor would retry close() on a dead
+        // cursor and the interface would never be released.
+        try {
+            auto& st = status();
+            resultSet_->close(&st);
+        } catch (const Firebird::FbException& e) {
+            resultSet_->release();
+            resultSet_ = nullptr;
+            eof_ = true;
+            ++generation_;
+            throw FirebirdException(e);
+        }
         resultSet_->release();
         resultSet_ = nullptr;
         eof_ = true;
