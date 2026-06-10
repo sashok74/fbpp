@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
+#include <algorithm>
 #include <sstream>
 #include <iomanip>
 #include "fbpp/core/detail/conversion_utils.hpp"
@@ -75,7 +76,28 @@ inline void packJsonToBuffer(const nlohmann::json& jsonData, uint8_t* buffer,
             " elements, but query expects " + std::to_string(fieldCount) + " parameters"
         );
     }
-    
+
+    if (isObject) {
+        // Only positional index keys ("0", "1", ...) are meaningful here —
+        // named keys are converted to an array earlier (NamedParamHelper).
+        // A non-index key reaching this point used to silently turn the
+        // parameter into NULL (e.g. named keys passed to a '?' statement).
+        for (auto& [key, val] : jsonData.items()) {
+            (void)val;
+            const bool isIndex = !key.empty() &&
+                std::all_of(key.begin(), key.end(),
+                            [](unsigned char c) { return std::isdigit(c); });
+            if (!isIndex || std::stoull(key) >= fieldCount) {
+                throw FirebirdException(
+                    "Invalid parameter key '" + key + "': query has " +
+                    std::to_string(fieldCount) +
+                    " positional parameters (use indexes \"0\"..\"" +
+                    std::to_string(fieldCount - 1) +
+                    "\" or named parameters in the SQL)");
+            }
+        }
+    }
+
     // Pack each field
     for (unsigned i = 0; i < fieldCount; ++i) {
         // Get field info from metadata
