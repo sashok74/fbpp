@@ -142,6 +142,50 @@ TEST_F(StatementTest, OpenCursorBasic) {
     tra->Commit();
 }
 
+// VARCHAR(N) должен вмещать ровно N байт данных: ёмкость поля — это
+// getLength(), двухбайтовый префикс длины движок учитывает отдельно.
+// Регрессия: кодек резал данные до N-2 байт (off-by-two).
+TEST_F(StatementTest, VarcharFullByteLengthRoundTrip) {
+    auto ddl = connection_->Execute(
+        "CREATE TABLE varchar_len_test (id INTEGER, v VARCHAR(10) CHARACTER SET OCTETS)");
+    ddl->Commit();
+
+    const std::string payload(10, 'A');  // ровно 10 байт — легально для VARCHAR(10)
+
+    // JSON-путь записи
+    auto ins = connection_->prepareStatement(
+        "INSERT INTO varchar_len_test (id, v) VALUES (:id, :v)");
+    auto tx = connection_->StartTransaction();
+    nlohmann::json params = {{"id", 1}, {"v", payload}};
+    tx->execute(ins, params);
+
+    // Кортежный путь записи
+    auto ins2 = connection_->prepareStatement(
+        "INSERT INTO varchar_len_test (id, v) VALUES (?, ?)");
+    tx->execute(ins2, std::make_tuple(2, payload));
+    tx->Commit();
+
+    auto sel = connection_->prepareStatement(
+        "SELECT v FROM varchar_len_test ORDER BY id");
+    auto tx2 = connection_->StartTransaction();
+    auto rs = tx2->openCursor(sel);
+
+    std::tuple<std::string> row;
+    ASSERT_TRUE(rs->fetch(row));
+    EXPECT_EQ(std::get<0>(row), payload) << "JSON write path truncated VARCHAR";
+    ASSERT_TRUE(rs->fetch(row));
+    EXPECT_EQ(std::get<0>(row), payload) << "Tuple write path truncated VARCHAR";
+
+    rs->close();
+    tx2->Commit();
+
+    // Переполнение (11 байт в VARCHAR(10)) — ошибка, а не молчаливое усечение
+    auto tx3 = connection_->StartTransaction();
+    nlohmann::json tooLong = {{"id", 3}, {"v", std::string(11, 'B')}};
+    EXPECT_THROW(tx3->execute(ins, tooLong), FirebirdException);
+    tx3->Rollback();
+}
+
 TEST_F(StatementTest, GetMetadata) {
     auto stmt = connection_->prepareStatement(
         "SELECT id, name, amount FROM statement_test"

@@ -340,22 +340,27 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
             ISC_QUAD blobId = createBlob(ctx.transaction, blobData);
             std::memcpy(dataPtr, &blobId, sizeof(ISC_QUAD));
         } else if (ctx.field && (ctx.field->type == SQL_TEXT || ctx.field->type == SQL_VARYING)) {
+            // IMessageMetadata::getLength() returns the DATA capacity in
+            // bytes; for SQL_VARYING the 2-byte length prefix is accounted
+            // for separately by the engine when laying out offsets.
+            // Oversize input raises an error (mirroring the engine's
+            // "string right truncation") instead of silently corrupting data.
+            if (strValue.size() > static_cast<size_t>(ctx.field->length)) {
+                throw FirebirdException(
+                    "String value too long for field " + ctx.field->name +
+                    ": " + std::to_string(strValue.size()) + " bytes, field holds " +
+                    std::to_string(ctx.field->length) + " bytes");
+            }
             if (ctx.field->type == SQL_TEXT) {
-                size_t copyLen = std::min(strValue.size(), static_cast<size_t>(ctx.field->length));
-                std::memcpy(dataPtr, strValue.data(), copyLen);
-                if (copyLen < ctx.field->length) {
-                    std::memset(dataPtr + copyLen, ' ', ctx.field->length - copyLen);
+                std::memcpy(dataPtr, strValue.data(), strValue.size());
+                if (strValue.size() < ctx.field->length) {
+                    std::memset(dataPtr + strValue.size(), ' ',
+                                ctx.field->length - strValue.size());
                 }
             } else { // SQL_VARYING
-                unsigned maxDataLength = ctx.field->length - sizeof(uint16_t);
-                size_t actualLen = strValue.length();
-                if (actualLen > maxDataLength) {
-                    // Truncate
-                    actualLen = maxDataLength;
-                }
-                uint16_t len = static_cast<uint16_t>(actualLen);
+                uint16_t len = static_cast<uint16_t>(strValue.size());
                 std::memcpy(dataPtr, &len, sizeof(uint16_t));
-                std::memcpy(dataPtr + sizeof(uint16_t), strValue.data(), actualLen);
+                std::memcpy(dataPtr + sizeof(uint16_t), strValue.data(), strValue.size());
             }
         } else if (ctx.field) {
             // Handle extended types conversion from string
@@ -413,15 +418,15 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
                     }
                     std::string dtStr = strValue.substr(0, tzPos);
                     std::string tzStr = strValue.substr(tzPos);
-                    
+
                     parseIsoDate(dtStr.substr(0, 10), year, month, day);
                     parseIsoTime(dtStr.substr(11), hours, minutes, seconds, fractions);
-                    
+
                     ISC_DATE date = util->encodeDate(year, month, day);
                     ISC_TIME time = util->encodeTime(hours, minutes, seconds, fractions);
                     int16_t offset = parseTimezoneOffset(tzStr);
                     uint16_t zoneId = static_cast<uint16_t>(offset); // fallback: mirror offset into zone id for offset-only usage
-                    
+
                     std::memcpy(dataPtr, &date, 4);
                     std::memcpy(dataPtr + 4, &time, 4);
                     std::memcpy(dataPtr + 8, &zoneId, 2);
@@ -442,14 +447,14 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
                     }
                     std::string timeStr = strValue.substr(0, tzPos);
                     std::string tzStr = strValue.substr(tzPos);
-                    
+
                     unsigned hours, minutes, seconds, fractions;
                     parseIsoTime(timeStr, hours, minutes, seconds, fractions);
-                    
+
                     ISC_TIME time = util->encodeTime(hours, minutes, seconds, fractions);
                     int16_t offset = parseTimezoneOffset(tzStr);
                     uint16_t zoneId = static_cast<uint16_t>(offset); // store offset in zone id as fallback
-                    
+
                     std::memcpy(dataPtr, &time, 4);
                     std::memcpy(dataPtr + 4, &zoneId, 2);
                     std::memcpy(dataPtr + 6, &offset, 2);
