@@ -106,6 +106,52 @@ TEST_F(NamedParametersTest, ParseMixedParams) {
     EXPECT_EQ(result.parameters[1].position, 2);  // Position 1 is the positional ?
 }
 
+// A quote character inside a single-line comment must not open a string
+// literal (regression: "don't" used to flip the parser into string mode
+// and :id was never converted).
+TEST_F(NamedParametersTest, ParseQuoteInsideSingleLineComment) {
+    std::string sql = "-- don't touch this\nSELECT * FROM t WHERE id = :id";
+    auto result = NamedParamParser::parse(sql);
+
+    EXPECT_TRUE(result.hasNamedParams);
+    EXPECT_EQ(result.convertedSql, "-- don't touch this\nSELECT * FROM t WHERE id = ?");
+    ASSERT_EQ(result.parameters.size(), 1);
+    EXPECT_EQ(result.parameters[0].name, "id");
+}
+
+// A quote character inside a block comment must not open a string literal.
+TEST_F(NamedParametersTest, ParseQuoteInsideBlockComment) {
+    std::string sql = "/* it's a comment */ SELECT * FROM t WHERE id = :id";
+    auto result = NamedParamParser::parse(sql);
+
+    EXPECT_TRUE(result.hasNamedParams);
+    EXPECT_EQ(result.convertedSql, "/* it's a comment */ SELECT * FROM t WHERE id = ?");
+    ASSERT_EQ(result.parameters.size(), 1);
+    EXPECT_EQ(result.parameters[0].name, "id");
+}
+
+// "/*/" must not close the comment it just opened; :p stays inside the comment.
+TEST_F(NamedParametersTest, ParseSlashStarSlashDoesNotCloseComment) {
+    std::string sql = "/*/ :p */ SELECT :id FROM t";
+    auto result = NamedParamParser::parse(sql);
+
+    EXPECT_TRUE(result.hasNamedParams);
+    EXPECT_EQ(result.convertedSql, "/*/ :p */ SELECT ? FROM t");
+    ASSERT_EQ(result.parameters.size(), 1);
+    EXPECT_EQ(result.parameters[0].name, "id");
+}
+
+// Named parameters inside comments must not be converted.
+TEST_F(NamedParametersTest, ParseParamInsideCommentIgnored) {
+    std::string sql = "SELECT * FROM t WHERE id = :id -- :not_a_param\n/* :also_not */ AND x = :x";
+    auto result = NamedParamParser::parse(sql);
+
+    EXPECT_TRUE(result.hasNamedParams);
+    ASSERT_EQ(result.parameters.size(), 2);
+    EXPECT_EQ(result.parameters[0].name, "id");
+    EXPECT_EQ(result.parameters[1].name, "x");
+}
+
 // Test parser with string literals
 TEST_F(NamedParametersTest, ParseWithStringLiterals) {
     std::string sql = "SELECT * FROM users WHERE name = ':not_a_param' AND id = :user_id";
