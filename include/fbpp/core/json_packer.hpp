@@ -41,7 +41,13 @@ inline void packJsonValue(const nlohmann::json& value, uint8_t* buffer,
     } else if (value.is_boolean()) {
         sql_value_codec::write_sql_value(ctx, value.get<bool>(), data_ptr);
     } else if (value.is_number_integer()) {
-        if (field.type == SQL_INT128 || field.type == SQL_DEC16 || field.type == SQL_DEC34) {
+        // JSON unsigned > INT64_MAX would wrap negative through get<int64_t>;
+        // route it through the string path (INT128 can hold it, narrower
+        // columns get a proper range error).
+        if (value.is_number_unsigned() &&
+            value.get<uint64_t>() > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+            sql_value_codec::write_sql_value(ctx, std::to_string(value.get<uint64_t>()), data_ptr);
+        } else if (field.type == SQL_INT128 || field.type == SQL_DEC16 || field.type == SQL_DEC34) {
             // Convert to string for extended types to ensure correct parsing/conversion via Firebird API
             sql_value_codec::write_sql_value(ctx, std::to_string(value.get<int64_t>()), data_ptr);
         } else {

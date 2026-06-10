@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cctype>
+#include <limits>
 
 namespace fbpp::core::detail {
 
@@ -62,16 +63,24 @@ inline int64_t string_to_decimal_i64(const std::string& str, int scaleNeg /* <0 
     
     combined = intPart + fracPart;
     
-    // Convert to int64_t
+    // Convert to int64_t with overflow checking — unchecked accumulation
+    // silently wrapped (signed overflow UB) for 19+ digit inputs.
     int64_t result = 0;
     for (char c : combined) {
-        if (!std::isdigit(c)) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) {
             throw FirebirdException("Invalid numeric string: " + str);
         }
-        result = result * 10 + (c - '0');
+        const int digit = c - '0';
+        if (result > (std::numeric_limits<int64_t>::max() - digit) / 10) {
+            throw FirebirdException("Numeric value out of range: " + str);
+        }
+        result = result * 10 + digit;
     }
-    
-    return negative ? -result : result;
+
+    if (negative) {
+        return -result;
+    }
+    return result;
 }
 
 inline std::string decimal_to_string_i64(int64_t v, int scaleNeg /* <0 */) {
