@@ -70,8 +70,18 @@ TEST_F(StatementCacheTest, CacheHitAndMiss) {
     EXPECT_EQ(stats.hitCount, 1);
     EXPECT_EQ(stats.cacheSize, 1);
 
-    // Same statement pointer should be returned
-    EXPECT_EQ(stmt1.get(), stmt2.get());
+    // Checkout semantics: while stmt1 is held, the second caller gets a
+    // distinct exclusive instance (still a key hit, see stats above).
+    EXPECT_NE(stmt1.get(), stmt2.get());
+
+    // After both are released, the next get() reuses a pooled instance.
+    Statement* raw1 = stmt1.get();
+    Statement* raw2 = stmt2.get();
+    stmt1.reset();
+    stmt2.reset();
+    auto stmt3 = cache.get(connection_.get(), sql, 0);
+    ASSERT_NE(stmt3, nullptr);
+    EXPECT_TRUE(stmt3.get() == raw1 || stmt3.get() == raw2);
 }
 
 // Test LRU eviction

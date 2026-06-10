@@ -13,9 +13,16 @@ namespace fbpp {
 namespace core {
 
 StatementCache::StatementCache(const CacheConfig& config)
-    : config_(config) {}
+    : config_(config), core_(std::make_shared<PoolCore>()) {}
 
 StatementCache::~StatementCache() {
+    // Mark the pool closed first (under the shared mutex): outstanding
+    // checkout deleters on other threads then destroy their instances
+    // instead of returning them into a dying cache.
+    {
+        std::lock_guard<std::mutex> lock(core_->mutex);
+        core_->closed = true;
+    }
     clear();
 }
 
@@ -27,55 +34,15 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
     std::string actualSql = parseResult.hasNamedParams ? parseResult.convertedSql : sql;
 
     if (!config_.enabled) {
-        // Cache disabled, create new statement directly
-        auto& env = Environment::getInstance();
-        auto attachment = connection->getAttachment();
-        if (!attachment) {
-            throw FirebirdException("Not connected to database");
-        }
-
-        Firebird::IStatus* raw = env.getMaster()->getStatus();
-        Firebird::ThrowStatusWrapper st(raw);
-
-        try {
-            // Prepare statement without transaction (uses implicit transaction)
-            // Use converted SQL if named params were found
-            auto tra = connection->StartTransaction();
-            Firebird::IStatement* stmt = attachment->prepare(
-                &st, tra->getTransaction(), 0, actualSql.c_str(), 3, flags);
-
-            if (!stmt) {
-                st.dispose();
-                throw FirebirdException("Failed to prepare statement");
-            }
-
-            st.dispose();
-            auto stmtPtr = std::make_shared<Statement>(stmt, connection);
-
-            // Set named parameter mapping if any
-            if (parseResult.hasNamedParams) {
-                stmtPtr->setNamedParamMapping(parseResult.nameToPositions, true);
-            }
-
-            return stmtPtr;
-
-        } catch (const Firebird::FbException& e) {
-            FirebirdException fbppEx(e);
-
-            fbpp::util::trace(fbpp::util::TraceLevel::error, "StatementCache",
-                        [&](auto& oss) {
-                            oss << "Failed to prepare SQL: " << actualSql << "\n"
-                                << "Error: " << fbppEx.what() << "\n"
-                                << "Code: " << fbppEx.getErrorCode() << "\n"
-                                << "SQLState: " << fbppEx.getSQLState();
-                        });
-
-            st.dispose();
-            throw fbppEx;
-        }
+        // Cache disabled: hand out an unpooled instance (the caller fully
+        // owns it; no checkout/return bookkeeping).
+        return prepareInstance(
+            connection, actualSql,
+            parseResult.hasNamedParams ? &parseResult.nameToPositions : nullptr,
+            flags);
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(core_->mutex);
 
     // Use original SQL for cache key (with named parameters)
     std::string key = generateKey(sql, flags);
@@ -83,7 +50,7 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
     // Check if statement exists in cache
     auto it = cache_.find(key);
     if (it != cache_.end()) {
-        // Cache hit
+        // Key-level cache hit
         stats_.hitCount++;
 
         // Update LRU position
@@ -93,8 +60,24 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
         it->second->lastUsed = std::chrono::steady_clock::now();
         it->second->useCount++;
 
-        // Return shared pointer to the cached statement
-        return it->second->statement;
+        // Pop an idle instance; skip ones the user invalidated via free().
+        auto& idle = it->second->idle;
+        while (!idle.empty()) {
+            auto inner = std::move(idle.back());
+            idle.pop_back();
+            if (inner && inner->isValid()) {
+                return makeCheckout(key, std::move(inner));
+            }
+        }
+
+        // All instances are checked out (or were invalidated): prepare an
+        // additional instance for the same key. Still a hit — the key and
+        // its metadata are cached; only the IStatement is new.
+        auto inner = prepareInstance(
+            connection, actualSql,
+            parseResult.hasNamedParams ? &parseResult.nameToPositions : nullptr,
+            flags);
+        return makeCheckout(key, std::move(inner));
     }
 
     // Cache miss
@@ -105,7 +88,39 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
         evictLRU();
     }
 
-    // Create new statement directly without recursion
+    auto stmt = prepareInstance(
+        connection, actualSql,
+        parseResult.hasNamedParams ? &parseResult.nameToPositions : nullptr,
+        flags);
+
+    // Create cache entry (the instance itself is checked out to the caller
+    // and joins the idle pool when the caller releases it)
+    auto entry = std::make_unique<CachedStatement>();
+    entry->sql = sql;
+    entry->flags = flags;
+    entry->lastUsed = std::chrono::steady_clock::now();
+    entry->useCount = 1;
+
+    // Extract metadata
+    extractMetadata(stmt.get(), *entry);
+
+    // Add to cache
+    cache_[key] = std::move(entry);
+
+    // Add to LRU list (front = most recent)
+    lruList_.push_front(key);
+    lruMap_[key] = lruList_.begin();
+
+    stats_.cacheSize = cache_.size();
+
+    return makeCheckout(key, std::move(stmt));
+}
+
+std::shared_ptr<Statement> StatementCache::prepareInstance(
+        Connection* connection,
+        const std::string& actualSql,
+        const std::unordered_map<std::string, std::vector<size_t>>* nameToPositions,
+        unsigned flags) {
     auto& env = Environment::getInstance();
     auto attachment = connection->getAttachment();
     if (!attachment) {
@@ -116,46 +131,27 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
     Firebird::ThrowStatusWrapper st(raw);
 
     try {
-        // Prepare statement without transaction (uses implicit transaction)
-        // Use converted SQL if named params were found
+        // Prepare against a short-lived probe transaction. Commit it
+        // explicitly — letting the destructor roll it back emitted a
+        // spurious "Transaction destroyed while still active" warning on
+        // every prepare.
         auto tra = connection->StartTransaction();
         Firebird::IStatement* fbStmt = attachment->prepare(
             &st, tra->getTransaction(), 0, actualSql.c_str(), 3, flags);
 
         if (!fbStmt) {
-            st.dispose();
             throw FirebirdException("prepare() returned nullptr");
         }
 
-        st.dispose();
         auto stmt = std::make_shared<Statement>(fbStmt, connection);
+        tra->Commit();
 
         // Set named parameter mapping if any
-        if (parseResult.hasNamedParams) {
-            stmt->setNamedParamMapping(parseResult.nameToPositions, true);
+        if (nameToPositions) {
+            stmt->setNamedParamMapping(*nameToPositions, true);
         }
 
-        // Create cache entry
-        auto entry = std::make_unique<CachedStatement>();
-        entry->statement = stmt;  // Share ownership
-        entry->sql = sql;
-        entry->flags = flags;
-        entry->lastUsed = std::chrono::steady_clock::now();
-        entry->useCount = 1;
-
-        // Extract metadata
-        extractMetadata(entry->statement.get(), *entry);
-
-        // Add to cache
-        cache_[key] = std::move(entry);
-
-        // Add to LRU list (front = most recent)
-        lruList_.push_front(key);
-        lruMap_[key] = lruList_.begin();
-
-        stats_.cacheSize = cache_.size();
-
-        // Return the shared pointer
+        st.dispose();
         return stmt;
 
     } catch (const Firebird::FbException& e) {
@@ -171,11 +167,58 @@ std::shared_ptr<Statement> StatementCache::get(Connection* connection,
 
         st.dispose();
         throw fbppEx;
+    } catch (...) {
+        // e.g. FirebirdException from StartTransaction()/Commit(); the raw
+        // IStatus must still be disposed.
+        st.dispose();
+        throw;
     }
 }
 
+std::shared_ptr<Statement> StatementCache::makeCheckout(std::string key,
+                                                        std::shared_ptr<Statement> inner) {
+    Statement* rawPtr = inner.get();
+    std::weak_ptr<PoolCore> coreWeak = core_;
+    // While checked out, the deleter owns the only strong reference to the
+    // instance. `this` is touched only under the core mutex with the closed
+    // flag false — ~StatementCache sets closed before any member is torn
+    // down, so a late return degrades to plain destruction.
+    return std::shared_ptr<Statement>(
+        rawPtr,
+        [coreWeak, self = this, key = std::move(key),
+         inner = std::move(inner)](Statement*) mutable {
+            if (auto core = coreWeak.lock()) {
+                std::lock_guard<std::mutex> lock(core->mutex);
+                if (!core->closed) {
+                    self->returnToPool(key, std::move(inner));
+                    return;
+                }
+            }
+            inner.reset();  // Pool is gone: destroy the instance.
+        });
+}
+
+void StatementCache::returnToPool(const std::string& key,
+                                  std::shared_ptr<Statement> inner) {
+    if (!config_.enabled || !inner || !inner->isValid()) {
+        // Disabled cache, or the user called free() on the instance — a
+        // poisoned instance must not re-enter the pool.
+        return;
+    }
+
+    auto it = cache_.find(key);
+    if (it == cache_.end()) {
+        return;  // Entry evicted/cleared while the instance was checked out.
+    }
+
+    if (it->second->idle.size() < kMaxIdlePerKey) {
+        it->second->idle.push_back(std::move(inner));
+    }
+    // Else: pool for this key is full — drop the surplus instance.
+}
+
 void StatementCache::clear() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(core_->mutex);
 
     // Statements will be freed automatically via unique_ptr destructors
     cache_.clear();
@@ -186,7 +229,7 @@ void StatementCache::clear() {
 }
 
 bool StatementCache::remove(const std::string& sql, unsigned flags) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(core_->mutex);
 
     std::string key = generateKey(sql, flags);
     auto it = cache_.find(key);
@@ -211,7 +254,7 @@ bool StatementCache::remove(const std::string& sql, unsigned flags) {
 }
 
 StatementCache::Statistics StatementCache::getStatistics() const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(core_->mutex);
 
     stats_.cacheSize = cache_.size();
 
@@ -225,7 +268,7 @@ StatementCache::Statistics StatementCache::getStatistics() const {
 }
 
 void StatementCache::setEnabled(bool enabled) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(core_->mutex);
 
     if (!enabled && config_.enabled) {
         cache_.clear();
@@ -240,7 +283,7 @@ void StatementCache::setEnabled(bool enabled) {
 }
 
 void StatementCache::setMaxSize(size_t maxSize) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(core_->mutex);
 
     config_.maxSize = maxSize;
 
@@ -254,14 +297,14 @@ void StatementCache::setMaxSize(size_t maxSize) {
 }
 
 void StatementCache::setTtlMinutes(size_t ttlMinutes) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(core_->mutex);
     config_.ttlMinutes = ttlMinutes;
     fbpp::util::trace(fbpp::util::TraceLevel::info, "StatementCache",
                 [&](auto& oss) { oss << "Cache TTL set to " << ttlMinutes << " minutes"; });
 }
 
 size_t StatementCache::removeExpired() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(core_->mutex);
 
     if (config_.ttlMinutes == 0) {
         // No TTL configured

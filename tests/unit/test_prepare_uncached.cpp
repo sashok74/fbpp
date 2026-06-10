@@ -45,9 +45,14 @@ TEST_F(PrepareUncachedTest, PrepareUncachedCoexistsWithCached) {
     auto raw = connection_->prepareStatementUncached(sql);
     EXPECT_EQ(connection_->getCacheStatistics().cacheSize, sizeAfterFirstCached);
 
-    // Cached prepare again — must hit the existing entry.
+    // Cached prepare again — must hit the existing entry (checkout
+    // semantics: cached1 is still held, so cached2 is a distinct exclusive
+    // instance; the hit is visible in the statistics, not via pointers).
+    auto hitsBefore = connection_->getCacheStatistics().hitCount;
     auto cached2 = connection_->prepareStatement(sql);
-    EXPECT_EQ(cached1.get(), cached2.get());
+    EXPECT_TRUE(cached2->isValid());
+    EXPECT_EQ(connection_->getCacheStatistics().hitCount, hitsBefore + 1);
+    EXPECT_EQ(connection_->getCacheStatistics().cacheSize, sizeAfterFirstCached);
 }
 
 TEST_F(PrepareUncachedTest, DescribeQueryDoesNotPopulateCache) {
