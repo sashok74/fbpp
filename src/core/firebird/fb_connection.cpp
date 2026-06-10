@@ -54,7 +54,11 @@ void Connection::connect(const ConnectionParams& params) {
         }
 
         if (!params.charset.empty()) {
-            dpb->insertString(&st, isc_dpb_set_db_charset, params.charset.c_str());
+            // isc_dpb_lc_ctype sets the client connection charset.
+            // (isc_dpb_set_db_charset would instead ALTER the database's
+            // default charset on every attach and leave the connection in
+            // charset NONE.)
+            dpb->insertString(&st, isc_dpb_lc_ctype, params.charset.c_str());
         }
 
         if (!params.role.empty()) {
@@ -294,7 +298,10 @@ void Connection::createDatabase(const ConnectionParams& params) {
         }
 
         if (!params.charset.empty()) {
+            // Default charset of the database being created...
             dpb->insertString(&st, isc_dpb_set_db_charset, params.charset.c_str());
+            // ...and the connection charset of the creating session itself.
+            dpb->insertString(&st, isc_dpb_lc_ctype, params.charset.c_str());
         }
 
         if (!params.role.empty()) {
