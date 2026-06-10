@@ -88,6 +88,66 @@ TEST_F(ExtendedTypesConversionTest, JsonPackUnpackExtendedTypes) {
     transaction->Commit();
 }
 
+// Перекрёстная проверка TZ-типов с движком. Round-trip через сам fbpp
+// раньше «проходил» из-за взаимокомпенсирующихся ошибок записи и чтения:
+// zone id кодировался как сырой offset (а не displacement+1439), в UTC-слот
+// писалось локальное время, а offset при чтении брался из padding-байтов.
+TEST_F(ExtendedTypesConversionTest, TimestampTzCrossCheckedWithEngine) {
+    if (!connection_) GTEST_SKIP() << "Database not available";
+
+    auto tx = connection_->StartTransaction();
+
+    // 1) Значение, записанное СЕРВЕРОМ (литерал), fbpp должен прочитать верно.
+    auto ins = connection_->prepareStatement(
+        "INSERT INTO TEST_EXTENDED_TYPES (ID, VAL_TIMESTAMP_TZ, VAL_TIME_TZ) VALUES "
+        "(100, TIMESTAMP '2025-06-10 12:00:00.0000 +05:00', TIME '12:00:00.0000 +05:00')");
+    tx->execute(ins);
+
+    auto sel = connection_->prepareStatement(
+        "SELECT VAL_TIMESTAMP_TZ, VAL_TIME_TZ FROM TEST_EXTENDED_TYPES WHERE ID = 100");
+    auto rs = tx->openCursor(sel);
+    std::tuple<std::string, std::string> row;
+    ASSERT_TRUE(rs->fetch(row));
+    EXPECT_EQ(std::get<0>(row), "2025-06-10T12:00:00.0000+05:00");
+    EXPECT_EQ(std::get<1>(row), "12:00:00.0000+05:00");
+    rs->close();
+
+    // 2) Значение, записанное fbpp-параметром, СЕРВЕР должен видеть как тот же
+    //    момент и ту же зону (сравнение TZ-типов в Firebird идёт по UTC).
+    auto ins2 = connection_->prepareStatement(
+        "INSERT INTO TEST_EXTENDED_TYPES (ID, VAL_TIMESTAMP_TZ) VALUES (?, ?)");
+    tx->execute(ins2, std::make_tuple(101, std::string("2025-06-10T12:00:00.0000+05:00")));
+
+    auto chk = connection_->prepareStatement(
+        "SELECT COUNT(*), MIN(CAST(VAL_TIMESTAMP_TZ AS VARCHAR(60))) "
+        "FROM TEST_EXTENDED_TYPES WHERE ID = 101 AND "
+        "VAL_TIMESTAMP_TZ = TIMESTAMP '2025-06-10 12:00:00.0000 +05:00'");
+    auto rs2 = tx->openCursor(chk);
+    std::tuple<int64_t, std::string> cntRow;
+    ASSERT_TRUE(rs2->fetch(cntRow));
+    EXPECT_EQ(std::get<0>(cntRow), 1)
+        << "Stored instant differs from what the engine stores for the same literal";
+    EXPECT_NE(std::get<1>(cntRow).find("+05:00"), std::string::npos)
+        << "Engine-rendered value lost the timezone: " << std::get<1>(cntRow);
+    rs2->close();
+
+    // 3) Суффикс 'Z' и регион-зона по имени должны приниматься на запись.
+    auto ins3 = connection_->prepareStatement(
+        "INSERT INTO TEST_EXTENDED_TYPES (ID, VAL_TIMESTAMP_TZ) VALUES (?, ?)");
+    tx->execute(ins3, std::make_tuple(102, std::string("2025-06-10T07:00:00.0000Z")));
+
+    auto chk3 = connection_->prepareStatement(
+        "SELECT COUNT(*) FROM TEST_EXTENDED_TYPES WHERE ID = 102 AND "
+        "VAL_TIMESTAMP_TZ = TIMESTAMP '2025-06-10 12:00:00.0000 +05:00'");
+    auto rs3 = tx->openCursor(chk3);
+    std::tuple<int64_t> cnt3;
+    ASSERT_TRUE(rs3->fetch(cnt3));
+    EXPECT_EQ(std::get<0>(cnt3), 1) << "'Z' input did not store the correct UTC instant";
+    rs3->close();
+
+    tx->Commit();
+}
+
 TEST_F(ExtendedTypesConversionTest, TuplePackUnpackExtendedTypesAsString) {
     if (!connection_) GTEST_SKIP() << "Database not available";
 

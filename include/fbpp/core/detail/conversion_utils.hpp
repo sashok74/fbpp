@@ -132,6 +132,34 @@ inline void parseIsoTime(const std::string& str, unsigned& hours, unsigned& minu
     }
 }
 
+// Split "<datetime-or-time><tz>" into body and timezone string accepted by
+// IUtil::encodeTimeStampTz/encodeTimeTz. Supported tz forms:
+//   "±HH:MM" / "±HHMM"  — offset (must start at/after minBodyLen)
+//   "Z"                 — UTC shorthand
+//   " <zone name>"      — space-separated IANA region (e.g. " Europe/Moscow")
+// minBodyLen guards against matching the date hyphens ("2024-01-01...").
+inline void splitTzSuffix(const std::string& str, size_t minBodyLen,
+                          std::string& body, std::string& tz) {
+    size_t spacePos = str.find(' ', minBodyLen);
+    if (spacePos != std::string::npos) {
+        body = str.substr(0, spacePos);
+        tz = str.substr(spacePos + 1);
+        if (!tz.empty()) return;
+    }
+    if (str.size() > minBodyLen && (str.back() == 'Z' || str.back() == 'z')) {
+        body = str.substr(0, str.size() - 1);
+        tz = "+00:00";
+        return;
+    }
+    size_t tzPos = str.find_last_of("+-");
+    if (tzPos == std::string::npos || tzPos < minBodyLen) {
+        throw FirebirdException("Value requires a timezone suffix "
+                                "(offset, 'Z' or ' <zone name>'): " + str);
+    }
+    body = str.substr(0, tzPos);
+    tz = str.substr(tzPos);
+}
+
 // Helper to parse timezone offset "+HH:MM" or "-HH:MM"
 inline int16_t parseTimezoneOffset(const std::string& tzStr) {
     if (tzStr.empty()) return 0;
