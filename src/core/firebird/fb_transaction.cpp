@@ -34,7 +34,13 @@ Transaction::~Transaction() {
             Rollback();
         }
         catch (...) {
-            // Ignore errors during destructor
+            // Ignore errors during destructor, but still release the
+            // client-side interface so a failed rollback doesn't leak it.
+            if (transaction_) {
+                transaction_->release();
+                transaction_ = nullptr;
+                active_ = false;
+            }
         }
     }
     statusWrapper_.dispose();
@@ -60,7 +66,12 @@ Transaction& Transaction::operator=(Transaction&& other) noexcept {
                 Rollback();
             }
             catch (...) {
-                // Ignore errors
+                // Ignore errors, but release the interface to avoid a leak
+                if (transaction_) {
+                    transaction_->release();
+                    transaction_ = nullptr;
+                    active_ = false;
+                }
             }
         }
         
@@ -86,6 +97,10 @@ void Transaction::Commit() {
         auto& st = status();
 
         transaction_->commit(&st);
+        // FB5 client: commit() no longer releases the interface (only the
+        // deprecated pre-v4 variants did). Release explicitly to avoid leaking
+        // one client-side ITransaction per transaction.
+        transaction_->release();
         transaction_ = nullptr;
         active_ = false;
 
@@ -110,6 +125,8 @@ void Transaction::Rollback() {
         auto& st = status();
 
         transaction_->rollback(&st);
+        // FB5 client: rollback() does not release the interface (see Commit()).
+        transaction_->release();
         transaction_ = nullptr;
         active_ = false;
 

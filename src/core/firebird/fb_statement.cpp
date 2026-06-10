@@ -65,6 +65,10 @@ void Statement::cleanup() {
         } catch (...) {
             // Suppress exceptions in destructor
         }
+        // FB5 client: free() no longer releases the interface (only the
+        // deprecated pre-v5 variant did). Release explicitly even if free()
+        // failed (e.g. attachment already gone) to avoid leaking it.
+        statement_->release();
         statement_ = nullptr;
     }
 }
@@ -334,6 +338,8 @@ void Statement::free() {
     if (statement_) {
         auto& st = status();
         statement_->free(&st);
+        // FB5 client: free() does not release the interface (see cleanup()).
+        statement_->release();
         statement_ = nullptr;
         
         // Clear cached metadata
