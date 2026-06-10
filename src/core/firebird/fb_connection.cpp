@@ -30,6 +30,17 @@ Connection::Connection(const ConnectionParams& params)
 }
 
 Connection::~Connection() {
+    // Free cached statements while the attachment is still alive —
+    // statementCache_ is a member and would otherwise be destroyed AFTER
+    // the destructor body, calling IStatement::free() on a detached
+    // attachment.
+    if (statementCache_) {
+        try {
+            statementCache_->clear();
+        } catch (...) {
+            // Ignore errors during destructor
+        }
+    }
     disconnect();
     // Dispose our owned IStatus
     statusWrapper_.dispose();
@@ -132,39 +143,45 @@ std::shared_ptr<Transaction> Connection::Execute(const std::string& sql) {
             throw FirebirdException("Failed to start transaction");
         }
 
-        // Try to prepare the statement first to catch syntax errors
-        Firebird::IStatement* stmt = attachment_->prepare(
-            &st, tra, 0, sql.c_str(), 3, 0);
-
-        if (!stmt) {
-            // Statement preparation failed
-            fbpp::util::trace(fbpp::util::TraceLevel::error, "Connection",
-                        [&](auto& oss) {
-                            oss << "Failed to prepare SQL statement: "
-                                << sql.substr(0, 100);
-                        });
-            // Clean up transaction
-            tra->rollback(&st);
-            tra->release();
-            throw FirebirdException("Failed to prepare SQL statement");
-        }
-
-        // Execute the prepared statement
+        // From here on the started transaction must not leak: prepare()
+        // and execute() THROW on failure (ThrowStatusWrapper), they do not
+        // return null — so cleanup has to live in a catch block, not in
+        // null checks.
         try {
-            stmt->execute(&st, tra, nullptr, nullptr, nullptr, nullptr);
-            stmt->free(&st);
-            stmt->release();
-        }
-        catch (...) {
-            // Clean up on error
-            if (stmt) {
+            Firebird::IStatement* stmt = attachment_->prepare(
+                &st, tra, 0, sql.c_str(), 3, 0);
+
+            if (!stmt) {
+                fbpp::util::trace(fbpp::util::TraceLevel::error, "Connection",
+                            [&](auto& oss) {
+                                oss << "Failed to prepare SQL statement: "
+                                    << sql.substr(0, 100);
+                            });
+                throw FirebirdException("Failed to prepare SQL statement");
+            }
+
+            try {
+                stmt->execute(&st, tra, nullptr, nullptr, nullptr, nullptr);
+                stmt->free(&st);
                 stmt->release();
             }
+            catch (...) {
+                stmt->release();
+                throw;
+            }
+
+            // Return transaction for commit/rollback
+            return std::make_shared<Transaction>(this, tra);
+        }
+        catch (...) {
+            // Roll back and release the otherwise-leaked transaction
+            // (server-side it would hold locks until detach).
+            try {
+                tra->rollback(&st);
+            } catch (...) { /* best effort */ }
+            tra->release();
             throw;
         }
-
-        // Return transaction for commit/rollback
-        return std::make_shared<Transaction>(this, tra);
     }
     catch (const Firebird::FbException& e) {
         throw FirebirdException(e);
@@ -255,11 +272,18 @@ void Connection::cancelOperation(CancelOperation option) {
                     oss << "cancelOperation(" << (optionName ? optionName : "UNKNOWN") << ")";
                 });
 
+    // cancelOperation is the one method documented for cross-thread use
+    // (RAISE/ABORT from another thread while this connection is busy).
+    // It must NOT touch the connection-wide statusWrapper_ that all other
+    // methods mutate — use a private short-lived IStatus instead.
+    Firebird::IStatus* raw = env_.getMaster()->getStatus();
+    Firebird::ThrowStatusWrapper st(raw);
     try {
-        auto& st = status();
         attachment_->cancelOperation(&st, static_cast<int>(option));
+        st.dispose();
     }
     catch (const Firebird::FbException& e) {
+        st.dispose();
         throw FirebirdException(e);
     }
 }
@@ -268,6 +292,12 @@ void Connection::ExecuteDDL(const std::string& ddl) {
     auto tra = StartTransaction();
     ExecuteInTransaction(tra.get(), ddl);
     tra->Commit();
+
+    // Schema may have changed: cached statements keep stale formats and
+    // metadata after ALTER/DROP, producing obscure engine errors on reuse.
+    if (statementCache_) {
+        statementCache_->clear();
+    }
 }
 
 // Static methods for database management
