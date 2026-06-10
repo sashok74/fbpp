@@ -96,7 +96,11 @@ std::unique_ptr<ResultSet> Transaction::openCursor(const std::shared_ptr<Stateme
         throw FirebirdException("Transaction is not active");
     }
 
-    return statement->openCursor(this, params);
+    // The cursor keeps the producing statement alive (an open cursor lives
+    // on its IStatement).
+    auto rs = statement->openCursor(this, params);
+    rs->retainStatement(statement);
+    return rs;
 }
 
 } // namespace core

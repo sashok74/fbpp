@@ -198,14 +198,19 @@ inline std::unique_ptr<ResultSet> Transaction::openCursor(
         unsigned flags) {
     if (!statement) throw FirebirdException("Invalid statement pointer");
     if (!isActive()) throw FirebirdException("Transaction is not active");
+    std::unique_ptr<ResultSet> rs;
     if (binder.empty()) {
-        return statement->openCursor(this, flags);
+        rs = statement->openCursor(this, flags);
+    } else {
+        rs = statement->openCursor(this,
+                                   binder.metadata()->getRawMetadata(),
+                                   binder.buffer(),
+                                   nullptr,
+                                   flags);
     }
-    return statement->openCursor(this,
-                                 binder.metadata()->getRawMetadata(),
-                                 binder.buffer(),
-                                 nullptr,
-                                 flags);
+    // The cursor keeps the producing statement alive.
+    rs->retainStatement(statement);
+    return rs;
 }
 
 inline std::unique_ptr<ResultSet> Transaction::openCursor(
