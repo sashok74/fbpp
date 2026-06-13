@@ -176,6 +176,43 @@ struct QueryDescriptor<QueryId::UpdateName> {
 
 } // namespace local
 
+namespace local {
+
+// Struct input AND struct output on the single-row RETURNING execute path —
+// the branch that previously threw "Unsupported input parameter type for
+// execute with RETURNING".
+struct InsertReturningInput {
+    int32_t fInteger;
+    std::string fVarchar;
+    bool fBoolean;
+};
+
+struct InsertReturningOutput {
+    int32_t id;
+};
+
+} // namespace local
+
+namespace fbpp::core {
+
+template<>
+struct StructDescriptor<local::InsertReturningInput> {
+    static constexpr auto fields = std::make_tuple(
+        makeField<&local::InsertReturningInput::fInteger>("F_INTEGER", SQL_LONG, 0, sizeof(int32_t), 0, false),
+        makeField<&local::InsertReturningInput::fVarchar>("F_VARCHAR", SQL_VARYING, 0, 64, 0, false),
+        makeField<&local::InsertReturningInput::fBoolean>("F_BOOLEAN", SQL_BOOLEAN, 0, sizeof(uint8_t), 0, false)
+    );
+};
+
+template<>
+struct StructDescriptor<local::InsertReturningOutput> {
+    static constexpr auto fields = std::make_tuple(
+        makeField<&local::InsertReturningOutput::id>("ID", SQL_LONG, 0, sizeof(int32_t), 0, false)
+    );
+};
+
+} // namespace fbpp::core
+
 class StructPackTest : public SuiteDatabaseTest {
 protected:
     std::vector<SchemaProfile> schemaProfiles() const override {
@@ -267,6 +304,38 @@ TEST_F(StructPackTest, PackAndUnpackStructAgainstTableTest1) {
     auto deleteTra = connection_->StartTransaction();
     ASSERT_EQ(deleteTra->execute(deleteStmt, std::make_tuple(targetId)), 1u);
     deleteTra->Commit();
+}
+
+TEST_F(StructPackTest, ExecuteReturningWithStructInputAndOutput) {
+    const int32_t marker = 600000;
+    const std::string label = "struct_returning";
+
+    local::InsertReturningInput in{marker, label, true};
+
+    auto tra = connection_->StartTransaction();
+    auto stmt = connection_->prepareStatement(
+        "INSERT INTO TABLE_TEST_1 (F_INTEGER, F_VARCHAR, F_BOOLEAN) "
+        "VALUES (:F_INTEGER, :F_VARCHAR, :F_BOOLEAN) RETURNING ID");
+    // 3-arg execute: struct in -> struct out (the formerly-throwing branch).
+    auto [affected, out] = tra->execute(stmt, in, local::InsertReturningOutput{});
+    EXPECT_EQ(affected, 1u);
+    EXPECT_GT(out.id, 0);
+    tra->Commit();
+
+    // The row exists under the RETURNING id with the struct's values.
+    TableTestSelectInput filter{out.id};
+    auto selStmt = connection_->prepareStatement(
+        "SELECT ID, F_INTEGER, F_VARCHAR FROM TABLE_TEST_1 WHERE ID = :id");
+    auto selTra = connection_->StartTransaction();
+    auto cursor = selTra->openCursor(selStmt, filter);
+    TableTestSelectOutput row{};
+    ASSERT_TRUE(cursor->fetch(row));
+    EXPECT_EQ(row.id, out.id);
+    ASSERT_TRUE(row.fInteger.has_value());
+    EXPECT_EQ(*row.fInteger, marker);
+    EXPECT_EQ(row.fVarchar, label);
+    cursor->close();
+    selTra->Commit();
 }
 
 TEST_F(StructPackTest, ExtendedTypesRoundTripUsingStructDescriptors) {

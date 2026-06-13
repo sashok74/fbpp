@@ -181,3 +181,54 @@ TEST_F(QueryGeneratorIntegrationTest, TableTest1CrudWorkflow) {
         FAIL() << "Unknown exception";
     }
 }
+
+// Typed INSERT ... RETURNING through the generated descriptor: the generator
+// emits both Input and Output structs and a QueryMode::Returning marker, and
+// executeReturning() routes them through the single-row RETURNING execute.
+TEST_F(QueryGeneratorIntegrationTest, ReturningInsertYieldsGeneratedId) {
+    using namespace generated::queries;
+    using IR = QueryDescriptor<QueryId::TABLE_TEST_1_IR>;
+
+    // Codegen classified the statement and emitted the execution mode.
+    static_assert(IR::mode == fbpp::core::QueryMode::Returning,
+                  "INSERT ... RETURNING must be generated as QueryMode::Returning");
+
+    const auto suffix = static_cast<std::int32_t>(
+        std::chrono::high_resolution_clock::now().time_since_epoch().count() % 1000000);
+    const std::int32_t testInteger = 700000 + suffix;
+    const std::string label = "returning_row_" + std::to_string(suffix);
+
+    try {
+        auto transaction = connection_->StartTransaction();
+
+        TABLE_TEST_1_IRIn params{};
+        assignField(params.fInteger, testInteger);
+        assignField(params.fVarchar, label);
+        assignField(params.fBoolean, true);
+
+        auto [affected, returned] = runOrFail([&] {
+            return fbpp::core::executeReturning<IR>(*connection_, *transaction, params);
+        });
+        EXPECT_EQ(affected, 1u);
+        assertHasValue(returned.id);
+        const auto newId = getValue(returned.id);
+        EXPECT_GT(newId, 0);
+
+        // The row must really exist under the id RETURNING handed back.
+        TABLE_TEST_1_SIn selectParams{};
+        assignField(selectParams.fInteger, testInteger);
+        assignField(selectParams.fVarchar, label);
+        auto rows = runOrFail([&] {
+            return executeQuery<QueryDescriptor<QueryId::TABLE_TEST_1_S>>(
+                *connection_, *transaction, selectParams);
+        });
+        ASSERT_EQ(rows.size(), 1u);
+        EXPECT_EQ(getValue(rows.front().id), newId);
+
+        transaction->Commit();
+    } catch (const fbpp::core::FirebirdException& e) {
+        FAIL() << "FirebirdException: " << e.what();
+    } catch (const std::exception& e) {
+        FAIL() << "std::exception: " << e.what();
+    }
+}

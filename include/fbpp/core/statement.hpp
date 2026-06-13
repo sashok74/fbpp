@@ -480,10 +480,14 @@ std::pair<unsigned, OutParams> Statement::execute(Transaction* transaction,
                 pack(inParams, inBuffer.data(), inMeta.get(), transaction);
             }
         } else {
-            throw FirebirdException("Unsupported input parameter type for execute with RETURNING");
+            // Universal pack for struct / other StructDescriptor-packable input,
+            // mirroring the non-RETURNING execute() path above. Enables generated
+            // proc Input structs with EXECUTE PROCEDURE ... RETURNING.
+            // (Additive: only affects input types that previously threw here.)
+            pack(inParams, inBuffer.data(), inMeta.get(), transaction);
         }
     }
-    
+
     // Prepare output buffer
     auto outMeta = getOutputMetadata();
     if (!outMeta) {
