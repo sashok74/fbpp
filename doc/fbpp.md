@@ -177,6 +177,8 @@ flowchart LR
 
 Итого: библиотека закрывает основной application-facing слой Firebird OO API, но не претендует на полноту по всему серверному и административному стеку.
 
+План доведения покрытия до полного (TPB-опции транзакций, BLOB-стриминг, batch-BLOB, scrollable-курсоры, getInfo, события, Services API, IDtc) — см. [roadmap_api_coverage.md](roadmap_api_coverage.md).
+
 ## Работа с типами
 
 ### Формы данных на границе API
