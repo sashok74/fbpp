@@ -3,6 +3,7 @@
 #include "fbpp/core/connection.hpp"
 #include "fbpp/core/message_metadata.hpp"
 #include "fbpp/schema/adapter_config.hpp"
+#include "fbpp/schema/query_analysis.hpp"
 #include "fbpp/schema/type_mapper.hpp"
 
 #include <optional>
@@ -35,6 +36,7 @@ struct QuerySpec {
     std::vector<FieldSpec> outputs;
     bool hasNamedParameters = false;
     std::string positionalSql;
+    fbpp::schema::QueryKind kind = fbpp::schema::QueryKind::unknown;
 };
 
 class QueryGeneratorService {

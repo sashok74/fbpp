@@ -52,6 +52,33 @@ std::string makeStructName(const std::string& queryName, bool isInput) {
     return queryName + (isInput ? "In" : "Out");
 }
 
+// Map (statement kind, presence of output) to the runtime QueryMode emitted
+// into each descriptor so callers know which executeXxx entry point fits.
+std::string_view queryModeFor(fbpp::schema::QueryKind kind, bool hasOutput) {
+    using QK = fbpp::schema::QueryKind;
+    switch (kind) {
+        case QK::select_query: return "Select";
+        case QK::ddl:          return "Ddl";
+        case QK::insert_query:
+        case QK::update_query:
+        case QK::delete_query:
+        case QK::execute_procedure:
+            // RETURNING / EXECUTE PROCEDURE with OUT params yields one output
+            // row -> Returning; otherwise just an affected-row count.
+            return hasOutput ? "Returning" : "Modify";
+        case QK::execute_block:
+            // A selectable (SUSPEND) block returns a row set via a cursor; a
+            // non-selectable block with RETURNS produces a single row. The two
+            // are indistinguishable from the statement text, so map by output
+            // presence to the common (selectable) case and let the caller
+            // override if needed.
+            return hasOutput ? "Select" : "Modify";
+        case QK::unknown:
+        default:
+            return "Unknown";
+    }
+}
+
 std::string renderMainHeader(const std::vector<QuerySpec>& queries,
                              std::string_view supportHeaderName,
                              const AdapterConfig& config) {
@@ -180,6 +207,8 @@ std::string renderMainHeader(const std::vector<QuerySpec>& queries,
         out << std::format("    static constexpr std::string_view sql = \"{}\";\n", escapedOriginal);
         out << std::format("    static constexpr std::string_view positionalSql = \"{}\";\n", escapedPrepared);
         out << std::format("    static constexpr bool hasNamedParameters = {};\n", q.hasNamedParameters ? "true" : "false");
+        out << std::format("    static constexpr fbpp::core::QueryMode mode = fbpp::core::QueryMode::{};\n",
+                           queryModeFor(q.kind, !q.outputs.empty()));
         out << "    using Input = " << makeStructName(q.name, true) << ";\n";
         out << "    using Output = " << makeStructName(q.name, false) << ";\n";
         out << "};\n\n";
@@ -261,6 +290,7 @@ std::vector<QuerySpec> QueryGeneratorService::buildQuerySpecs(const std::vector<
         auto analysis = analyzer.analyze(definition.sql);
         spec.positionalSql = analysis.positionalSql;
         spec.hasNamedParameters = analysis.hasNamedParameters;
+        spec.kind = analysis.kind;
 
         spec.inputs.reserve(analysis.inputParams.size());
         for (const auto& p : analysis.inputParams) {
