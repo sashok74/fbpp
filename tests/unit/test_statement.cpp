@@ -142,6 +142,35 @@ TEST_F(StatementTest, OpenCursorBasic) {
     tra->Commit();
 }
 
+// 3-arg execute (RETURNING) with tuple in -> tuple out. This primitive was
+// previously exercised only at the metadata/kind level, never executed.
+TEST_F(StatementTest, ExecuteReturningTuple) {
+    auto stmt = connection_->prepareStatement(
+        "INSERT INTO statement_test (id, name, amount) VALUES (?, ?, ?) "
+        "RETURNING id, name");
+
+    auto tra = connection_->StartTransaction();
+    auto [affected, returned] = tra->execute(
+        stmt,
+        std::make_tuple(7, std::string("ret"), 12.5),
+        std::tuple<int, std::string>{});
+
+    EXPECT_EQ(affected, 1u);
+    EXPECT_EQ(std::get<0>(returned), 7);
+    EXPECT_EQ(std::get<1>(returned), "ret");
+    tra->Commit();
+
+    // Row is actually present after commit.
+    auto sel = connection_->prepareStatement("SELECT name FROM statement_test WHERE id = 7");
+    auto tra2 = connection_->StartTransaction();
+    auto rs = tra2->openCursor(sel);
+    std::tuple<std::string> row;
+    ASSERT_TRUE(rs->fetch(row));
+    EXPECT_EQ(std::get<0>(row), "ret");
+    rs->close();
+    tra2->Commit();
+}
+
 TEST_F(StatementTest, GetMetadata) {
     auto stmt = connection_->prepareStatement(
         "SELECT id, name, amount FROM statement_test"
