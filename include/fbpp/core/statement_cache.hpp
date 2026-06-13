@@ -25,15 +25,25 @@ struct StatementCacheConfig {
 };
 
 /**
- * @brief LRU cache for prepared statements
+ * @brief LRU cache of prepared statements with checkout/return pooling
  *
- * Provides caching mechanism for prepared statements to avoid
- * repeated preparation overhead. Uses LRU eviction policy.
+ * Provides caching mechanism for prepared statements to avoid repeated
+ * preparation overhead. Uses LRU eviction policy over SQL keys.
+ *
+ * Checkout semantics: get() hands each caller an EXCLUSIVE Statement
+ * instance. While a caller (or a cursor retaining the statement) holds the
+ * shared_ptr, nobody else receives the same instance — concurrent get()
+ * calls for the same SQL receive additional instances prepared on demand
+ * (still counted as key hits). When the last reference drops, the instance
+ * returns to the per-key idle pool for reuse. This is what makes one
+ * IStatement's single-cursor limit, setTimeout() and free() private to one
+ * user instead of leaking across unrelated call sites.
  *
  * Thread-safety contract:
- * - Cache bookkeeping is protected by an internal mutex.
- * - Cached Statement instances remain bound to the owning Connection and are
- *   not safe to execute concurrently from multiple threads.
+ * - Cache bookkeeping is protected by an internal mutex (shared with the
+ *   checkout deleters so returns are safe at any time).
+ * - A checked-out Statement instance remains bound to the owning Connection
+ *   and is not safe to execute concurrently from multiple threads.
  */
 class StatementCache {
 public:
@@ -51,10 +61,14 @@ public:
     };
 
     /**
-     * @brief Cached statement entry
+     * @brief Cached statement entry (one per SQL key)
+     *
+     * Holds the idle (not checked out) Statement instances for this SQL.
+     * Checked-out instances are owned by their checkout deleters and come
+     * back via returnToPool() when the caller drops the last reference.
      */
     struct CachedStatement {
-        std::shared_ptr<Statement> statement;
+        std::vector<std::shared_ptr<Statement>> idle;
         std::string sql;
         unsigned flags;
         std::chrono::steady_clock::time_point lastUsed;
@@ -192,7 +206,49 @@ private:
                              std::string& convertedSql,
                              std::vector<std::string>& paramNames);
 
+    /**
+     * @brief Prepare a fresh Statement instance for the given (converted) SQL
+     * @note Must be called with core_->mutex held (prepare happens under the
+     *       cache lock, same as the original implementation).
+     */
+    std::shared_ptr<Statement> prepareInstance(
+        Connection* connection,
+        const std::string& actualSql,
+        const std::unordered_map<std::string, std::vector<size_t>>* nameToPositions,
+        unsigned flags);
+
+    /**
+     * @brief Wrap an instance into a checkout handle whose deleter returns
+     *        the instance to the idle pool on last release.
+     */
+    std::shared_ptr<Statement> makeCheckout(std::string key,
+                                            std::shared_ptr<Statement> inner);
+
+    /**
+     * @brief Return a checked-out instance to the idle pool.
+     * @note Must be called with core_->mutex held. Drops the instance if the
+     *       cache entry is gone, the cache is disabled, the instance was
+     *       free()d by the user, or the idle pool is full.
+     */
+    void returnToPool(const std::string& key, std::shared_ptr<Statement> inner);
+
 private:
+    /**
+     * @brief State shared between the cache and outstanding checkout deleters
+     *
+     * The deleters keep a weak_ptr to this core; ~StatementCache marks it
+     * closed under the mutex, so late returns from user code safely degrade
+     * to plain destruction instead of touching a dead cache.
+     */
+    struct PoolCore {
+        mutable std::mutex mutex;
+        bool closed = false;
+    };
+
+    // Cap of idle instances kept per SQL key; concurrency beyond this just
+    // re-prepares on demand.
+    static constexpr size_t kMaxIdlePerKey = 8;
+
     // Cache configuration
     CacheConfig config_;
 
@@ -205,8 +261,8 @@ private:
     // Map from key to position in LRU list for O(1) updates
     std::unordered_map<std::string, std::list<std::string>::iterator> lruMap_;
 
-    // Thread safety
-    mutable std::mutex mutex_;
+    // Thread safety + checkout-deleter handshake
+    std::shared_ptr<PoolCore> core_;
 
     // Statistics
     mutable Statistics stats_;

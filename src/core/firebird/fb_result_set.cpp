@@ -10,9 +10,9 @@ namespace core {
 ResultSet::ResultSet(Firebird::IResultSet* resultSet,
                     std::unique_ptr<MessageMetadata> metadata)
     : env_(Environment::getInstance()),
-      resultSet_(resultSet), 
+      resultSet_(resultSet),
       metadata_(std::move(metadata)),
-      transaction_(),  // Default-construct empty weak_ptr
+      transaction_(),  // No owning transaction (caller manages lifetimes)
       status_(env_.getMaster()->getStatus()),
       statusWrapper_(status_) {
     if (!resultSet_) {
@@ -25,11 +25,11 @@ ResultSet::ResultSet(Firebird::IResultSet* resultSet,
 
 ResultSet::ResultSet(Firebird::IResultSet* resultSet,
                     std::unique_ptr<MessageMetadata> metadata,
-                    std::weak_ptr<Transaction> transaction)
+                    std::shared_ptr<Transaction> transaction)
     : env_(Environment::getInstance()),
-      resultSet_(resultSet), 
+      resultSet_(resultSet),
       metadata_(std::move(metadata)),
-      transaction_(transaction),
+      transaction_(std::move(transaction)),
       status_(env_.getMaster()->getStatus()),
       statusWrapper_(status_) {
     if (!resultSet_) {
@@ -45,6 +45,7 @@ ResultSet::ResultSet(ResultSet&& other) noexcept
       resultSet_(other.resultSet_),
       metadata_(std::move(other.metadata_)),
       transaction_(std::move(other.transaction_)),
+      statement_(std::move(other.statement_)),
       status_(env_.getMaster()->getStatus()),
       statusWrapper_(status_),
       eof_(other.eof_),
@@ -59,6 +60,7 @@ ResultSet& ResultSet::operator=(ResultSet&& other) noexcept {
         resultSet_ = other.resultSet_;
         metadata_ = std::move(other.metadata_);
         transaction_ = std::move(other.transaction_);
+        statement_ = std::move(other.statement_);
         eof_ = other.eof_;
         buffer_ = std::move(other.buffer_);
         generation_ = other.generation_;
@@ -129,6 +131,8 @@ void ResultSet::close() {
             resultSet_ = nullptr;
             eof_ = true;
             ++generation_;
+            statement_.reset();
+            transaction_.reset();
             throw FirebirdException(e);
         }
         resultSet_->release();
@@ -136,6 +140,10 @@ void ResultSet::close() {
         eof_ = true;
         // Invalidate any outstanding RowView snapshots.
         ++generation_;
+        // Cursor is gone — stop keeping the producing statement and the
+        // transaction alive on its behalf.
+        statement_.reset();
+        transaction_.reset();
     }
 }
 
@@ -153,8 +161,7 @@ std::optional<Row> ResultSet::fetchOne() {
     if (result != RESULT_OK) {
         return std::nullopt;
     }
-    auto txShared = transaction_.lock();
-    RowView view(metadata_, buffer_.data(), txShared.get(), this, generation_);
+    RowView view(metadata_, buffer_.data(), transaction_.get(), this, generation_);
     return Row(view);
 }
 
@@ -186,10 +193,9 @@ void ResultSet::RowsRange::Iterator::advance() {
         end_ = true;
         return;
     }
-    auto txShared = rs_->transaction_.lock();
     current_.emplace(rs_->metadata_,
                      rs_->buffer_.data(),
-                     txShared.get(),
+                     rs_->transaction_.get(),
                      rs_,
                      rs_->generation_);
 }

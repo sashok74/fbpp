@@ -162,15 +162,20 @@ std::unique_ptr<ResultSet> Statement::openCursor(Transaction* transaction,
             auto meta = outMetadata ? outMetadata : statement_->getOutputMetadata(&st);
             auto metadataWrapper = std::make_unique<MessageMetadata>(meta);
 
-            // Get shared_ptr from Transaction using shared_from_this
+            // The cursor owns its transaction (a server-side cursor is only
+            // usable while the transaction lives). Every public API hands
+            // out Transactions via shared_ptr; a non-shared Transaction
+            // used to silently produce a cursor that could not load BLOBs.
+            std::shared_ptr<Transaction> transactionShared;
             try {
-                auto transactionShared = transaction->shared_from_this();
-                return std::make_unique<ResultSet>(cursor, std::move(metadataWrapper), transactionShared);
+                transactionShared = transaction->shared_from_this();
             } catch (const std::bad_weak_ptr&) {
-                // If transaction is not managed by shared_ptr, create ResultSet without it
-                // This means BLOBs won't be loaded automatically
-                return std::make_unique<ResultSet>(cursor, std::move(metadataWrapper));
+                throw FirebirdException(
+                    "openCursor requires a shared_ptr-managed Transaction "
+                    "(use Connection::StartTransaction)");
             }
+            return std::make_unique<ResultSet>(cursor, std::move(metadataWrapper),
+                                               std::move(transactionShared));
         } catch (...) {
             try { cursor->close(&st); } catch (...) { /* best effort */ }
             cursor->release();
