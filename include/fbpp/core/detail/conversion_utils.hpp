@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cctype>
+#include <limits>
 
 namespace fbpp::core::detail {
 
@@ -62,16 +63,24 @@ inline int64_t string_to_decimal_i64(const std::string& str, int scaleNeg /* <0 
     
     combined = intPart + fracPart;
     
-    // Convert to int64_t
+    // Convert to int64_t with overflow checking — unchecked accumulation
+    // silently wrapped (signed overflow UB) for 19+ digit inputs.
     int64_t result = 0;
     for (char c : combined) {
-        if (!std::isdigit(c)) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) {
             throw FirebirdException("Invalid numeric string: " + str);
         }
-        result = result * 10 + (c - '0');
+        const int digit = c - '0';
+        if (result > (std::numeric_limits<int64_t>::max() - digit) / 10) {
+            throw FirebirdException("Numeric value out of range: " + str);
+        }
+        result = result * 10 + digit;
     }
-    
-    return negative ? -result : result;
+
+    if (negative) {
+        return -result;
+    }
+    return result;
 }
 
 inline std::string decimal_to_string_i64(int64_t v, int scaleNeg /* <0 */) {
@@ -130,6 +139,34 @@ inline void parseIsoTime(const std::string& str, unsigned& hours, unsigned& minu
             fractions = std::stoul(fracStr);
         }
     }
+}
+
+// Split "<datetime-or-time><tz>" into body and timezone string accepted by
+// IUtil::encodeTimeStampTz/encodeTimeTz. Supported tz forms:
+//   "±HH:MM" / "±HHMM"  — offset (must start at/after minBodyLen)
+//   "Z"                 — UTC shorthand
+//   " <zone name>"      — space-separated IANA region (e.g. " Europe/Moscow")
+// minBodyLen guards against matching the date hyphens ("2024-01-01...").
+inline void splitTzSuffix(const std::string& str, size_t minBodyLen,
+                          std::string& body, std::string& tz) {
+    size_t spacePos = str.find(' ', minBodyLen);
+    if (spacePos != std::string::npos) {
+        body = str.substr(0, spacePos);
+        tz = str.substr(spacePos + 1);
+        if (!tz.empty()) return;
+    }
+    if (str.size() > minBodyLen && (str.back() == 'Z' || str.back() == 'z')) {
+        body = str.substr(0, str.size() - 1);
+        tz = "+00:00";
+        return;
+    }
+    size_t tzPos = str.find_last_of("+-");
+    if (tzPos == std::string::npos || tzPos < minBodyLen) {
+        throw FirebirdException("Value requires a timezone suffix "
+                                "(offset, 'Z' or ' <zone name>'): " + str);
+    }
+    body = str.substr(0, tzPos);
+    tz = str.substr(tzPos);
 }
 
 // Helper to parse timezone offset "+HH:MM" or "-HH:MM"

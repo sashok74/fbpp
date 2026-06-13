@@ -234,6 +234,35 @@ TEST_F(FirebirdExceptionIntegrationTest, DetailedErrorInfo) {
         // Сообщение должно содержать имя таблицы
         std::string whatStr = e.what();
         EXPECT_NE(whatStr.find("NON_EXISTENT_TABLE"), std::string::npos);
+
+        // Канонический SQLSTATE движка (fb_sqlstate) для "Table unknown" —
+        // 42S02, как и показывает isql. Раньше возвращался HY000 из карты.
+        EXPECT_EQ(e.getSQLState(), "42S02");
+    }
+}
+
+TEST_F(FirebirdExceptionIntegrationTest, EngineSQLStateNotMaskedByFallbackMap) {
+    // Ошибка конверсии (isc_convert_error) отсутствует в fallback-карте:
+    // раньше getSQLState() возвращал HY000, теперь — 22018 из status vector.
+    try {
+        auto tra = connection_->Execute(
+            "EXECUTE BLOCK AS DECLARE i INTEGER; "
+            "BEGIN i = CAST('abc' AS INTEGER); END");
+        FAIL() << "Should have thrown an exception";
+    }
+    catch (const FirebirdException& e) {
+        EXPECT_EQ(e.getSQLState(), "22018");
+    }
+}
+
+TEST_F(FirebirdExceptionIntegrationTest, DivisionByZeroSQLState) {
+    try {
+        auto tra = connection_->Execute(
+            "EXECUTE BLOCK AS DECLARE i INTEGER; BEGIN i = 1 / 0; END");
+        FAIL() << "Should have thrown an exception";
+    }
+    catch (const FirebirdException& e) {
+        EXPECT_EQ(e.getSQLState(), "22012");
     }
 }
 
@@ -295,8 +324,12 @@ TEST_F(FirebirdExceptionTest, SQLStateMapping) {
         const char* description;
     };
     
+    // Ожидания — канонические значения fb_sqlstate() клиентской библиотеки.
+    // Голый isc_arith_except (без уточняющего кода деления на ноль) — 22000;
+    // реальный вектор деления на ноль содержит второй gds-код и даёт 22012
+    // (см. интеграционный тест ниже).
     TestCase testCases[] = {
-        {335544321, "22012", "Division by zero"},
+        {335544321, "22000", "Arithmetic exception (bare)"},
         {335544347, "23000", "Integrity constraint violation"},
         {335544665, "23000", "Unique key violation"},
         {335544336, "40001", "Deadlock"},
@@ -326,6 +359,30 @@ TEST_F(FirebirdExceptionTest, SQLStateMapping) {
         
         status->dispose();
     }
+}
+
+// Движок присылает точный SQLSTATE через isc_arg_sql_state (после isc_arg_gds);
+// он должен иметь приоритет над захардкоженной картой кодов.
+TEST_F(FirebirdExceptionTest, EngineSQLStateWinsOverMappedState) {
+    auto& env = Environment::getInstance();
+    Firebird::IStatus* status = env.getMaster()->getStatus();
+
+    intptr_t errorVector[] = {
+        isc_arg_gds,
+        335544347,  // присутствует в карте (дал бы 23000)
+        isc_arg_sql_state,
+        reinterpret_cast<intptr_t>("42S02"),
+        isc_arg_end
+    };
+
+    status->setErrors(errorVector);
+    Firebird::FbException fbEx(status);
+    FirebirdException ex(fbEx);
+
+    EXPECT_EQ(ex.getSQLState(), "42S02");
+    EXPECT_EQ(ex.getErrorCode(), 335544347);
+
+    status->dispose();
 }
 
 TEST_F(FirebirdExceptionTest, StatusVectorSnapshotSurvivesStatusLifetime) {

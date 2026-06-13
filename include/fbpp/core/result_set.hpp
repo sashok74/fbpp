@@ -44,13 +44,16 @@ public:
 public:
     // Constructors
     //ResultSet() = default;
-    ResultSet(Firebird::IResultSet* resultSet, 
+    ResultSet(Firebird::IResultSet* resultSet,
               std::unique_ptr<MessageMetadata> metadata);
-    
-    // Constructor with Transaction weak_ptr
+
+    // Constructor with owning Transaction reference. The cursor keeps the
+    // transaction alive: a server-side cursor is only usable while its
+    // transaction exists, so the shortest-lived object in the chain holds
+    // the ownership.
     ResultSet(Firebird::IResultSet* resultSet,
               std::unique_ptr<MessageMetadata> metadata,
-              std::weak_ptr<Transaction> transaction);
+              std::shared_ptr<Transaction> transaction);
     
     // Move semantics
     ResultSet(ResultSet&& other) noexcept;
@@ -88,8 +91,7 @@ public:
         }
         
         // Use universal unpack
-        auto transaction = transaction_.lock();
-        record = unpack<T>(buffer_.data(), metadata_.get(), transaction.get());
+        record = unpack<T>(buffer_.data(), metadata_.get(), transaction_.get());
         return true;
     }
     
@@ -166,10 +168,23 @@ public:
     
     /**
      * @brief Get transaction reference
-     * @return Shared pointer to transaction or nullptr if expired
+     * @return Shared pointer to transaction or nullptr after close()
      */
-    std::shared_ptr<Transaction> getTransaction() const { 
-        return transaction_.lock(); 
+    std::shared_ptr<Transaction> getTransaction() const {
+        return transaction_;
+    }
+
+    /**
+     * @brief Keep the producing Statement alive for this cursor's lifetime.
+     *
+     * An open cursor lives on its IStatement: freeing the statement drops
+     * the cursor server-side. Transaction::openCursor(shared_ptr<Statement>)
+     * calls this so a pattern like
+     *   tx->openCursor(conn.prepareStatement(sql))
+     * cannot destroy the statement while the cursor is still being fetched.
+     */
+    void retainStatement(std::shared_ptr<Statement> statement) {
+        statement_ = std::move(statement);
     }
 
     /**
@@ -266,7 +281,11 @@ private:
     Firebird::IResultSet* resultSet_ = nullptr;
     // Shared so that Row owning copies can outlive the ResultSet.
     std::shared_ptr<const MessageMetadata> metadata_;
-    std::weak_ptr<Transaction> transaction_;  // Weak reference to transaction
+    // Owning: the cursor is the shortest-lived object of the chain and
+    // must keep its transaction (and statement, see retainStatement)
+    // alive. Both are released by close().
+    std::shared_ptr<Transaction> transaction_;
+    std::shared_ptr<Statement> statement_;
     Firebird::IStatus* status_;
     mutable Firebird::ThrowStatusWrapper statusWrapper_{nullptr};
     bool eof_ = false;

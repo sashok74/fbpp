@@ -33,47 +33,53 @@ NamedParamParser::ParseResult NamedParamParser::parse(const std::string& sql) {
             continue;
         }
 
+        // Inside a single-line comment: copy verbatim until end of line.
+        // Must be checked before quote handling so an apostrophe inside a
+        // comment (e.g. "-- don't") doesn't open a phantom string literal.
+        if (inSingleLineComment) {
+            if (ch == '\n' || ch == '\r') {
+                inSingleLineComment = false;
+            }
+            result.convertedSql += ch;
+            continue;
+        }
+
+        // Inside a multi-line comment: copy verbatim until "*/".
+        if (inMultiLineComment) {
+            if (ch == '*' && nextCh == '/') {
+                inMultiLineComment = false;
+                result.convertedSql += ch;
+                result.convertedSql += nextCh;
+                ++i; // Skip '/'
+            } else {
+                result.convertedSql += ch;
+            }
+            continue;
+        }
+
+        // Start of single-line comment
+        if (ch == '-' && nextCh == '-') {
+            inSingleLineComment = true;
+            result.convertedSql += ch;
+            result.convertedSql += nextCh;
+            ++i; // Skip second '-'
+            continue;
+        }
+
+        // Start of multi-line comment. Consume both opener chars so the
+        // opener's '*' can't be matched as part of a closing "*/" (the
+        // "/*/" case must NOT terminate the comment).
+        if (ch == '/' && nextCh == '*') {
+            inMultiLineComment = true;
+            result.convertedSql += ch;
+            result.convertedSql += nextCh;
+            ++i; // Skip '*'
+            continue;
+        }
+
         // Start of string literal
         if (ch == '\'' || ch == '"') {
             currentQuote = ch;
-            result.convertedSql += ch;
-            continue;
-        }
-
-        // Handle comments
-        if (!inSingleLineComment && !inMultiLineComment) {
-            // Check for single-line comment
-            if (ch == '-' && nextCh == '-') {
-                inSingleLineComment = true;
-                result.convertedSql += ch;
-                continue;
-            }
-            // Check for multi-line comment start
-            if (ch == '/' && nextCh == '*') {
-                inMultiLineComment = true;
-                result.convertedSql += ch;
-                continue;
-            }
-        }
-
-        // End of single-line comment
-        if (inSingleLineComment && (ch == '\n' || ch == '\r')) {
-            inSingleLineComment = false;
-            result.convertedSql += ch;
-            continue;
-        }
-
-        // End of multi-line comment
-        if (inMultiLineComment && ch == '*' && nextCh == '/') {
-            inMultiLineComment = false;
-            result.convertedSql += ch;
-            result.convertedSql += nextCh;
-            ++i; // Skip next '/'
-            continue;
-        }
-
-        // If we're in a comment, just copy the character
-        if (inSingleLineComment || inMultiLineComment) {
             result.convertedSql += ch;
             continue;
         }
@@ -82,14 +88,14 @@ NamedParamParser::ParseResult NamedParamParser::parse(const std::string& sql) {
         if ((ch == ':' || ch == '@') && i + 1 < sql.size()) {
             // Check if next character starts an identifier
             char next = sql[i + 1];
-            if (std::isalpha(next) || next == '_') {
+            if (std::isalpha(static_cast<unsigned char>(next)) || next == '_') {
                 // Extract parameter name
                 size_t nameStart = i + 1;
                 size_t nameEnd = nameStart;
 
                 while (nameEnd < sql.size()) {
                     char c = sql[nameEnd];
-                    if (std::isalnum(c) || c == '_') {
+                    if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') {
                         nameEnd++;
                     } else {
                         break;

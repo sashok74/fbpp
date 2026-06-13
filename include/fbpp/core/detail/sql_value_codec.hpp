@@ -83,7 +83,25 @@ inline int64_t pow10_int(int scale) {
     return result;
 }
 
-inline int64_t round_scaled(double value) {
+// value * 10^scale with overflow check — the unchecked multiply was UB and
+// silently wrapped (9e18 into NUMERIC(18,2) stored garbage).
+inline int64_t scale_up_checked(int64_t value, int scale, const char* sqlTypeName) {
+    const int64_t factor = pow10_int(scale);
+    if (factor > 1 &&
+        (value > std::numeric_limits<int64_t>::max() / factor ||
+         value < std::numeric_limits<int64_t>::min() / factor)) {
+        throw FirebirdException(std::string("Scaled value out of range for ") + sqlTypeName);
+    }
+    return value * factor;
+}
+
+// double -> int64 rounding (half away from zero) with range check — the
+// bare cast is UB once the value leaves int64 range. NaN fails the
+// comparison chain and throws too.
+inline int64_t round_to_i64_checked(double value, const char* sqlTypeName) {
+    if (!(value > -9223372036854775808.0 && value < 9223372036854775808.0)) {
+        throw FirebirdException(std::string("Value out of range for ") + sqlTypeName);
+    }
     if (value >= 0.0) {
         return static_cast<int64_t>(value + 0.5);
     }
@@ -199,21 +217,21 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
             if (ctx.field->scale < 0) {
                 switch (fieldType) {
                     case SQL_SHORT: {
-                        const int64_t scaled = numericValue * pow10_int(-ctx.field->scale);
+                        const int64_t scaled = scale_up_checked(numericValue, -ctx.field->scale, "SMALLINT");
                         const int16_t v = checked_narrow<int16_t>(scaled, "SMALLINT");
                         std::memcpy(dataPtr, &v, sizeof(v));
                         setNotNull(ctx.nullIndicator);
                         return;
                     }
                     case SQL_LONG: {
-                        const int64_t scaled = numericValue * pow10_int(-ctx.field->scale);
+                        const int64_t scaled = scale_up_checked(numericValue, -ctx.field->scale, "INTEGER");
                         const int32_t v = checked_narrow<int32_t>(scaled, "INTEGER");
                         std::memcpy(dataPtr, &v, sizeof(v));
                         setNotNull(ctx.nullIndicator);
                         return;
                     }
                     case SQL_INT64: {
-                        const int64_t scaled = numericValue * pow10_int(-ctx.field->scale);
+                        const int64_t scaled = scale_up_checked(numericValue, -ctx.field->scale, "BIGINT");
                         std::memcpy(dataPtr, &scaled, sizeof(scaled));
                         setNotNull(ctx.nullIndicator);
                         return;
@@ -262,8 +280,22 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
                     setNotNull(ctx.nullIndicator);
                     return;
                 }
+                case SQL_TYPE_DATE:
+                case SQL_TYPE_TIME: {
+                    // Documented wire mapping: raw uint32 counts (see the
+                    // matching read path).
+                    const uint32_t v = checked_narrow<uint32_t>(numericValue, "DATE/TIME");
+                    std::memcpy(dataPtr, &v, sizeof(v));
+                    setNotNull(ctx.nullIndicator);
+                    return;
+                }
                 default:
-                    break;
+                    // Delegate INT128/DECFLOAT/CHAR/etc. to the string path,
+                    // which handles them via IUtil or throws a meaningful
+                    // error. Falling through used to mark the field NOT NULL
+                    // with NOTHING written (silently stored zero).
+                    write_sql_value(ctx, std::to_string(numericValue), dataPtr);
+                    return;
             }
         }
     } else if constexpr (std::is_floating_point_v<ValueType>) {
@@ -273,7 +305,8 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
             if (ctx.field->scale < 0) {
                 const int scale = -ctx.field->scale;
                 const int64_t factor = pow10_int(scale);
-                const int64_t scaled = round_scaled(static_cast<double>(value) * static_cast<double>(factor));
+                const int64_t scaled = round_to_i64_checked(
+                    static_cast<double>(value) * static_cast<double>(factor), "scaled NUMERIC");
 
                 switch (fieldType) {
                     case SQL_SHORT: {
@@ -313,15 +346,39 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
                     setNotNull(ctx.nullIndicator);
                     return;
                 }
+                // Integer columns at scale 0 used to fall through and
+                // silently store zero. Round half away from zero, like the
+                // scaled path above.
+                case SQL_SHORT: {
+                    const int16_t v = checked_narrow<int16_t>(
+                        round_to_i64_checked(static_cast<double>(value), "SMALLINT"), "SMALLINT");
+                    std::memcpy(dataPtr, &v, sizeof(v));
+                    setNotNull(ctx.nullIndicator);
+                    return;
+                }
+                case SQL_LONG: {
+                    const int32_t v = checked_narrow<int32_t>(
+                        round_to_i64_checked(static_cast<double>(value), "INTEGER"), "INTEGER");
+                    std::memcpy(dataPtr, &v, sizeof(v));
+                    setNotNull(ctx.nullIndicator);
+                    return;
+                }
+                case SQL_INT64: {
+                    const int64_t v = round_to_i64_checked(static_cast<double>(value), "BIGINT");
+                    std::memcpy(dataPtr, &v, sizeof(v));
+                    setNotNull(ctx.nullIndicator);
+                    return;
+                }
                 case SQL_DEC16:
                 case SQL_DEC34:
                 case SQL_INT128:
                 case SQL_TEXT:
                 case SQL_VARYING:
+                default:
+                    // Delegate the rest to the string path (handles the
+                    // listed types, throws meaningfully for the others).
                     write_sql_value(ctx, floating_to_string(value), dataPtr);
                     return;
-                default:
-                    break;
             }
         }
     } else if constexpr (std::is_same_v<ValueType, std::string> || std::is_same_v<ValueType, const char*>) {
@@ -340,22 +397,27 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
             ISC_QUAD blobId = createBlob(ctx.transaction, blobData);
             std::memcpy(dataPtr, &blobId, sizeof(ISC_QUAD));
         } else if (ctx.field && (ctx.field->type == SQL_TEXT || ctx.field->type == SQL_VARYING)) {
+            // IMessageMetadata::getLength() returns the DATA capacity in
+            // bytes; for SQL_VARYING the 2-byte length prefix is accounted
+            // for separately by the engine when laying out offsets.
+            // Oversize input raises an error (mirroring the engine's
+            // "string right truncation") instead of silently corrupting data.
+            if (strValue.size() > static_cast<size_t>(ctx.field->length)) {
+                throw FirebirdException(
+                    "String value too long for field " + ctx.field->name +
+                    ": " + std::to_string(strValue.size()) + " bytes, field holds " +
+                    std::to_string(ctx.field->length) + " bytes");
+            }
             if (ctx.field->type == SQL_TEXT) {
-                size_t copyLen = std::min(strValue.size(), static_cast<size_t>(ctx.field->length));
-                std::memcpy(dataPtr, strValue.data(), copyLen);
-                if (copyLen < ctx.field->length) {
-                    std::memset(dataPtr + copyLen, ' ', ctx.field->length - copyLen);
+                std::memcpy(dataPtr, strValue.data(), strValue.size());
+                if (strValue.size() < ctx.field->length) {
+                    std::memset(dataPtr + strValue.size(), ' ',
+                                ctx.field->length - strValue.size());
                 }
             } else { // SQL_VARYING
-                unsigned maxDataLength = ctx.field->length - sizeof(uint16_t);
-                size_t actualLen = strValue.length();
-                if (actualLen > maxDataLength) {
-                    // Truncate
-                    actualLen = maxDataLength;
-                }
-                uint16_t len = static_cast<uint16_t>(actualLen);
+                uint16_t len = static_cast<uint16_t>(strValue.size());
                 std::memcpy(dataPtr, &len, sizeof(uint16_t));
-                std::memcpy(dataPtr + sizeof(uint16_t), strValue.data(), actualLen);
+                std::memcpy(dataPtr + sizeof(uint16_t), strValue.data(), strValue.size());
             }
         } else if (ctx.field) {
             // Handle extended types conversion from string
@@ -407,25 +469,24 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
                 }
                 case SQL_TIMESTAMP_TZ: {
                     unsigned year, month, day, hours, minutes, seconds, fractions;
-                    size_t tzPos = strValue.find_last_of("+-");
-                    if (tzPos == std::string::npos || tzPos < 19) {
-                        throw FirebirdException("TIMESTAMP_TZ requires timezone offset: " + strValue);
-                    }
-                    std::string dtStr = strValue.substr(0, tzPos);
-                    std::string tzStr = strValue.substr(tzPos);
-                    
+                    std::string dtStr, tzStr;
+                    splitTzSuffix(strValue, 19, dtStr, tzStr);
+
                     parseIsoDate(dtStr.substr(0, 10), year, month, day);
                     parseIsoTime(dtStr.substr(11), hours, minutes, seconds, fractions);
-                    
-                    ISC_DATE date = util->encodeDate(year, month, day);
-                    ISC_TIME time = util->encodeTime(hours, minutes, seconds, fractions);
-                    int16_t offset = parseTimezoneOffset(tzStr);
-                    uint16_t zoneId = static_cast<uint16_t>(offset); // fallback: mirror offset into zone id for offset-only usage
-                    
-                    std::memcpy(dataPtr, &date, 4);
-                    std::memcpy(dataPtr + 4, &time, 4);
-                    std::memcpy(dataPtr + 8, &zoneId, 2);
-                    std::memcpy(dataPtr + 10, &offset, 2);
+
+                    // Delegate to the engine: encodeTimeStampTz converts the
+                    // wall-clock time to UTC and encodes the zone id properly
+                    // (offset zones are stored as displacement+1439, names as
+                    // IANA ids). Hand-rolling this produced values other
+                    // clients could not decode.
+                    ISC_TIMESTAMP_TZ tstz{};
+                    util->encodeTimeStampTz(&status, &tstz, year, month, day,
+                                            hours, minutes, seconds, fractions,
+                                            tzStr.c_str());
+                    std::memcpy(dataPtr, &tstz.utc_timestamp.timestamp_date, 4);
+                    std::memcpy(dataPtr + 4, &tstz.utc_timestamp.timestamp_time, 4);
+                    std::memcpy(dataPtr + 8, &tstz.time_zone, 2);
                     break;
                 }
                 case SQL_TYPE_TIME: {
@@ -436,23 +497,19 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
                     break;
                 }
                 case SQL_TIME_TZ: {
-                    size_t tzPos = strValue.find_last_of("+-");
-                    if (tzPos == std::string::npos || tzPos < 8) {
-                        throw FirebirdException("TIME_TZ requires timezone offset: " + strValue);
-                    }
-                    std::string timeStr = strValue.substr(0, tzPos);
-                    std::string tzStr = strValue.substr(tzPos);
-                    
+                    std::string timeStr, tzStr;
+                    splitTzSuffix(strValue, 8, timeStr, tzStr);
+
                     unsigned hours, minutes, seconds, fractions;
                     parseIsoTime(timeStr, hours, minutes, seconds, fractions);
-                    
-                    ISC_TIME time = util->encodeTime(hours, minutes, seconds, fractions);
-                    int16_t offset = parseTimezoneOffset(tzStr);
-                    uint16_t zoneId = static_cast<uint16_t>(offset); // store offset in zone id as fallback
-                    
-                    std::memcpy(dataPtr, &time, 4);
-                    std::memcpy(dataPtr + 4, &zoneId, 2);
-                    std::memcpy(dataPtr + 6, &offset, 2);
+
+                    // Delegate zone encoding + UTC conversion to the engine
+                    // (see SQL_TIMESTAMP_TZ above).
+                    ISC_TIME_TZ ttz{};
+                    util->encodeTimeTz(&status, &ttz, hours, minutes, seconds,
+                                       fractions, tzStr.c_str());
+                    std::memcpy(dataPtr, &ttz.utc_time, 4);
+                    std::memcpy(dataPtr + 4, &ttz.time_zone, 2);
                     break;
                 }
                 case SQL_TYPE_DATE: {
@@ -586,7 +643,7 @@ void read_sql_value(const SqlReadContext& ctx, const uint8_t* dataPtr, T& value)
         }
     }
 
-    if constexpr (std::is_same_v<ValueType, double>) {
+    if constexpr (std::is_floating_point_v<ValueType>) {
         if (ctx.field && ctx.field->scale < 0) {
             const int scale = -ctx.field->scale;
             int64_t raw = 0;
@@ -602,14 +659,121 @@ void read_sql_value(const SqlReadContext& ctx, const uint8_t* dataPtr, T& value)
                 std::memcpy(&raw, dataPtr, sizeof(int64_t));
             }
             const int64_t factor = pow10_int(scale);
-            value = static_cast<double>(raw) / static_cast<double>(factor);
+            value = static_cast<ValueType>(static_cast<double>(raw) / static_cast<double>(factor));
             return;
         }
-        // Plain DOUBLE PRECISION (scale==0): direct memcpy. The if-constexpr
-        // chain below is discarded for ValueType==double, so the final
-        // else-memcpy fallback at the bottom of this function is unreachable
-        // here — we must write the result explicitly.
-        std::memcpy(&value, dataPtr, sizeof(double));
+        // Scale==0: dispatch by the actual wire type. A blind
+        // sizeof(ValueType) memcpy read garbage for double<-FLOAT (8 bytes
+        // from a 4-byte slot) and for float<-DOUBLE (half of a double).
+        switch (ctx.field ? normalize_sql_type(ctx.field->type) : SQL_DOUBLE) {
+            case SQL_FLOAT: {
+                float v{};
+                std::memcpy(&v, dataPtr, sizeof(v));
+                value = static_cast<ValueType>(v);
+                return;
+            }
+            case SQL_DOUBLE:
+            case SQL_D_FLOAT: {
+                double v{};
+                std::memcpy(&v, dataPtr, sizeof(v));
+                value = static_cast<ValueType>(v);
+                return;
+            }
+            case SQL_SHORT: {
+                int16_t v{};
+                std::memcpy(&v, dataPtr, sizeof(v));
+                value = static_cast<ValueType>(v);
+                return;
+            }
+            case SQL_LONG: {
+                int32_t v{};
+                std::memcpy(&v, dataPtr, sizeof(v));
+                value = static_cast<ValueType>(v);
+                return;
+            }
+            case SQL_INT64: {
+                int64_t v{};
+                std::memcpy(&v, dataPtr, sizeof(v));
+                value = static_cast<ValueType>(v);
+                return;
+            }
+            default:
+                throw FirebirdException(
+                    "Unsupported read of SQL type " +
+                    std::to_string(ctx.field ? ctx.field->type : 0) +
+                    " into a floating-point value (field " +
+                    (ctx.field ? ctx.field->name : "<unknown>") + ")");
+        }
+    } else if constexpr (std::is_integral_v<ValueType> && !std::is_same_v<ValueType, bool>) {
+        // Typed read with range check — the old sizeof(ValueType) memcpy
+        // overread short columns into wide targets (garbage from adjacent
+        // fields) and silently truncated wide columns into narrow targets.
+        const unsigned fieldType = ctx.field ? normalize_sql_type(ctx.field->type)
+                                             : (sizeof(ValueType) == 8 ? SQL_INT64
+                                                : sizeof(ValueType) == 4 ? SQL_LONG
+                                                                         : SQL_SHORT);
+        int64_t raw = 0;
+        switch (fieldType) {
+            case SQL_SHORT: {
+                int16_t v{};
+                std::memcpy(&v, dataPtr, sizeof(v));
+                raw = v;
+                break;
+            }
+            case SQL_LONG: {
+                int32_t v{};
+                std::memcpy(&v, dataPtr, sizeof(v));
+                raw = v;
+                break;
+            }
+            case SQL_INT64: {
+                std::memcpy(&raw, dataPtr, sizeof(raw));
+                break;
+            }
+            case SQL_BOOLEAN: {
+                uint8_t b{};
+                std::memcpy(&b, dataPtr, sizeof(b));
+                raw = b;
+                break;
+            }
+            case SQL_TYPE_DATE:
+            case SQL_TYPE_TIME: {
+                // Documented wire mapping: DATE/TIME are raw uint32 counts
+                // (days since 1858-11-17 / 1/10000 s units).
+                uint32_t v{};
+                std::memcpy(&v, dataPtr, sizeof(v));
+                raw = v;
+                break;
+            }
+            default:
+                throw FirebirdException(
+                    "Unsupported read of SQL type " +
+                    std::to_string(ctx.field ? ctx.field->type : 0) +
+                    " into an integral value (field " +
+                    (ctx.field ? ctx.field->name : "<unknown>") + ")");
+        }
+        if (ctx.field && ctx.field->scale < 0) {
+            // Reading a scaled NUMERIC into an integer used to return the
+            // RAW scaled value (123.45 -> 12345). De-scale exactly; a value
+            // with a fractional part does not fit an integer target.
+            const int64_t factor = pow10_int(-ctx.field->scale);
+            if (raw % factor != 0) {
+                throw FirebirdException(
+                    "Scaled value has a fractional part; read field " +
+                    ctx.field->name + " into a floating-point or string value instead");
+            }
+            raw /= factor;
+        }
+        if constexpr (std::is_unsigned_v<ValueType> && sizeof(ValueType) == 8) {
+            // checked_narrow's limits don't survive the int64 cast for
+            // unsigned 64-bit targets; a sign check is sufficient here.
+            if (raw < 0) {
+                throw FirebirdException("Negative value read into unsigned target");
+            }
+            value = static_cast<ValueType>(raw);
+        } else {
+            value = checked_narrow<ValueType>(raw, "target integer type");
+        }
         return;
     } else if constexpr (std::is_same_v<ValueType, std::string>) {
         if (isAnyBlob(ctx.field) && ctx.transaction) {
@@ -679,24 +843,30 @@ void read_sql_value(const SqlReadContext& ctx, const uint8_t* dataPtr, T& value)
                     break;
                 }
                 case SQL_TIMESTAMP_TZ: {
-                    ISC_TIMESTAMP utcTimestamp{};
-                    std::memcpy(&utcTimestamp.timestamp_date, dataPtr, 4);
-                    std::memcpy(&utcTimestamp.timestamp_time, dataPtr + 4, 4);
-                    int16_t offset{};
-                    std::memcpy(&offset, dataPtr + 10, 2);
-                    if (offset == 0) {
-                        uint16_t zoneRaw{};
-                        std::memcpy(&zoneRaw, dataPtr + 8, 2);
-                        offset = static_cast<int16_t>(zoneRaw); // fallback if server echoed offset in zone field
-                    }
+                    // The wire value is UTC timestamp + Firebird zone id;
+                    // the engine decodes it back to wall-clock time and a
+                    // zone string ("+05:00" for offset zones, IANA name for
+                    // region zones). The old code read the offset from
+                    // struct padding bytes, which are not part of the type.
+                    ISC_TIMESTAMP_TZ tstz{};
+                    std::memcpy(&tstz.utc_timestamp.timestamp_date, dataPtr, 4);
+                    std::memcpy(&tstz.utc_timestamp.timestamp_time, dataPtr + 4, 4);
+                    std::memcpy(&tstz.time_zone, dataPtr + 8, 2);
                     unsigned year, month, day, hours, minutes, seconds, fractions;
-                    util->decodeDate(utcTimestamp.timestamp_date, &year, &month, &day);
-                    util->decodeTime(utcTimestamp.timestamp_time, &hours, &minutes, &seconds, &fractions);
-                    int offset_hours = offset / 60;
-                    int offset_minutes = std::abs(offset) % 60;
-                    std::snprintf(buffer, sizeof(buffer), "%04u-%02u-%02uT%02u:%02u:%02u.%04u%+03d:%02d",
-                                  year, month, day, hours, minutes, seconds, fractions, offset_hours, offset_minutes);
-                    value = buffer;
+                    char tzBuf[64] = {};
+                    util->decodeTimeStampTz(&status, &tstz, &year, &month, &day,
+                                            &hours, &minutes, &seconds, &fractions,
+                                            sizeof(tzBuf), tzBuf);
+                    std::snprintf(buffer, sizeof(buffer), "%04u-%02u-%02uT%02u:%02u:%02u.%04u",
+                                  year, month, day, hours, minutes, seconds, fractions);
+                    std::string out(buffer);
+                    if (tzBuf[0] == '+' || tzBuf[0] == '-') {
+                        out += tzBuf;          // offset zone: append directly
+                    } else if (tzBuf[0] != '\0') {
+                        out += ' ';
+                        out += tzBuf;          // region zone: " Europe/Moscow"
+                    }
+                    value = std::move(out);
                     break;
                 }
                 case SQL_TYPE_TIME: {
@@ -710,22 +880,25 @@ void read_sql_value(const SqlReadContext& ctx, const uint8_t* dataPtr, T& value)
                     break;
                 }
                 case SQL_TIME_TZ: {
-                    ISC_TIME utcTime{};
-                    std::memcpy(&utcTime, dataPtr, 4);
-                    int16_t offset{};
-                    std::memcpy(&offset, dataPtr + 6, 2);
-                    if (offset == 0) {
-                        uint16_t zoneRaw{};
-                        std::memcpy(&zoneRaw, dataPtr + 4, 2);
-                        offset = static_cast<int16_t>(zoneRaw);
-                    }
+                    // See SQL_TIMESTAMP_TZ above: delegate decoding to the
+                    // engine instead of reading padding bytes.
+                    ISC_TIME_TZ ttz{};
+                    std::memcpy(&ttz.utc_time, dataPtr, 4);
+                    std::memcpy(&ttz.time_zone, dataPtr + 4, 2);
                     unsigned hours, minutes, seconds, fractions;
-                    util->decodeTime(utcTime, &hours, &minutes, &seconds, &fractions);
-                    int offset_hours = offset / 60;
-                    int offset_minutes = std::abs(offset) % 60;
-                    std::snprintf(buffer, sizeof(buffer), "%02u:%02u:%02u.%04u%+03d:%02d",
-                                  hours, minutes, seconds, fractions, offset_hours, offset_minutes);
-                    value = buffer;
+                    char tzBuf[64] = {};
+                    util->decodeTimeTz(&status, &ttz, &hours, &minutes, &seconds,
+                                       &fractions, sizeof(tzBuf), tzBuf);
+                    std::snprintf(buffer, sizeof(buffer), "%02u:%02u:%02u.%04u",
+                                  hours, minutes, seconds, fractions);
+                    std::string out(buffer);
+                    if (tzBuf[0] == '+' || tzBuf[0] == '-') {
+                        out += tzBuf;
+                    } else if (tzBuf[0] != '\0') {
+                        out += ' ';
+                        out += tzBuf;
+                    }
+                    value = std::move(out);
                     break;
                 }
                 case SQL_TYPE_DATE: {

@@ -34,7 +34,13 @@ Transaction::~Transaction() {
             Rollback();
         }
         catch (...) {
-            // Ignore errors during destructor
+            // Ignore errors during destructor, but still release the
+            // client-side interface so a failed rollback doesn't leak it.
+            if (transaction_) {
+                transaction_->release();
+                transaction_ = nullptr;
+                active_ = false;
+            }
         }
     }
     statusWrapper_.dispose();
@@ -60,7 +66,12 @@ Transaction& Transaction::operator=(Transaction&& other) noexcept {
                 Rollback();
             }
             catch (...) {
-                // Ignore errors
+                // Ignore errors, but release the interface to avoid a leak
+                if (transaction_) {
+                    transaction_->release();
+                    transaction_ = nullptr;
+                    active_ = false;
+                }
             }
         }
         
@@ -86,6 +97,10 @@ void Transaction::Commit() {
         auto& st = status();
 
         transaction_->commit(&st);
+        // FB5 client: commit() no longer releases the interface (only the
+        // deprecated pre-v4 variants did). Release explicitly to avoid leaking
+        // one client-side ITransaction per transaction.
+        transaction_->release();
         transaction_ = nullptr;
         active_ = false;
 
@@ -110,6 +125,8 @@ void Transaction::Rollback() {
         auto& st = status();
 
         transaction_->rollback(&st);
+        // FB5 client: rollback() does not release the interface (see Commit()).
+        transaction_->release();
         transaction_ = nullptr;
         active_ = false;
 
@@ -298,16 +315,12 @@ std::unique_ptr<ResultSet> Transaction::openCursor(const std::unique_ptr<Stateme
         throw FirebirdException("Transaction is not active");
     }
     
-    // Delegate to Statement's openCursor method using shared_from_this
-    // Note: shared_from_this() requires that the Transaction object is already managed by a shared_ptr
-    try {
-        return statement->openCursor(shared_from_this());
-    } catch (const std::bad_weak_ptr&) {
-        // Fall back to raw pointer if not managed by shared_ptr
-        // This can happen during transition period
-        // Explicitly call non-template overload
-        return statement->openCursor(this, static_cast<unsigned>(0));
-    }
+    // Delegate to Statement's openCursor; the Statement resolves the
+    // shared_ptr to this Transaction itself (and throws a clear error if
+    // the Transaction is not shared_ptr-managed).
+    // unique_ptr-owned statements cannot be retained by the cursor — the
+    // caller remains responsible for keeping the statement alive.
+    return statement->openCursor(this, static_cast<unsigned>(0));
 }
 
 // Batch operations
@@ -352,13 +365,11 @@ std::unique_ptr<ResultSet> Transaction::openCursor(const std::shared_ptr<Stateme
         throw FirebirdException("Transaction is not active");
     }
 
-    // Delegate to Statement's openCursor method
-    try {
-        return statement->openCursor(shared_from_this());
-    } catch (const std::bad_weak_ptr&) {
-        // Fall back to raw pointer if not managed by shared_ptr
-        return statement->openCursor(this, static_cast<unsigned>(0));
-    }
+    // Delegate to Statement's openCursor, then make the cursor keep the
+    // producing statement alive (an open cursor lives on its IStatement).
+    auto rs = statement->openCursor(this, static_cast<unsigned>(0));
+    rs->retainStatement(statement);
+    return rs;
 }
 
 // createBatch for shared_ptr

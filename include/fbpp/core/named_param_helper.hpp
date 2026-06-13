@@ -4,6 +4,8 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
+#include <algorithm>
+#include <cctype>
 #include "fbpp/core/exception.hpp"
 
 namespace fbpp {
@@ -60,17 +62,24 @@ public:
                         result[pos] = value;
                     }
                 }
-            } else {
-                // Try to parse as positional index (e.g., "0", "1", etc.)
-                try {
-                    size_t pos = std::stoull(key);
-                    if (pos < paramCount) {
-                        result[pos] = value;
-                    }
-                } catch (...) {
-                    // Not a valid index, ignore or could throw warning
-                    // For now, we silently ignore unknown keys
+            } else if (!key.empty() &&
+                       std::all_of(key.begin(), key.end(),
+                                   [](unsigned char c) { return std::isdigit(c); })) {
+                // Positional index key (e.g., "0", "1"). Must be all digits:
+                // stoull("0abc") would silently parse the prefix and clobber
+                // position 0.
+                size_t pos = std::stoull(key);
+                if (pos >= paramCount) {
+                    throw FirebirdException(
+                        "Positional parameter index " + key + " out of range: query has " +
+                        std::to_string(paramCount) + " parameters");
                 }
+                result[pos] = value;
+            } else {
+                // A typo'd name used to be silently ignored, leaving the
+                // parameter NULL — silent data corruption. Fail loudly.
+                throw FirebirdException(
+                    "Unknown named parameter '" + key + "' (no such :name in the query)");
             }
         }
 

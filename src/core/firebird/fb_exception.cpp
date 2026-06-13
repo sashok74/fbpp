@@ -109,9 +109,9 @@ FirebirdException::FirebirdException(const Firebird::FbException& fb_ex)
 
     if (error_messages_.size() > 1) {
         std::stringstream ss;
-        ss << message_ << "\\nError chain:";
+        ss << message_ << "\nError chain:";
         for (size_t i = 0; i < error_messages_.size(); ++i) {
-            ss << "\\n  [" << i << "] " << error_messages_[i];
+            ss << "\n  [" << i << "] " << error_messages_[i];
         }
         message_ = ss.str();
     }
@@ -129,6 +129,20 @@ void FirebirdException::extractErrorDetails(Firebird::IStatus* status) {
     status_vector_.clear();
     sql_code_ = static_cast<int>(isc_sqlcode(reinterpret_cast<const ISC_STATUS*>(errors)));
 
+    // Canonical SQLSTATE is COMPUTED from the status vector by the client
+    // library (the engine does not put isc_arg_sql_state into the vector in
+    // practice). An explicit isc_arg_sql_state entry, if present, overrides
+    // this below; the hard-coded map is only a last-resort fallback.
+    {
+        char sqlstate[6] = {0};
+        fb_sqlstate(sqlstate, reinterpret_cast<const ISC_STATUS*>(errors));
+        // "00000" (success) means the vector carries no error info —
+        // leave sql_state_ empty so the fallbacks below apply.
+        if (sqlstate[0] != '\0' && std::strcmp(sqlstate, "00000") != 0) {
+            sql_state_ = sqlstate;
+        }
+    }
+
     size_t i = 0;
     while (errors[i] != isc_arg_end) {
         const intptr_t tag = errors[i++];
@@ -138,10 +152,9 @@ void FirebirdException::extractErrorDetails(Firebird::IStatus* status) {
                 status_vector_.push_back(makeIntegerEntry(tag, code));
                 if (error_code_ == 0) {
                     error_code_ = static_cast<int>(code);
-                    // Map error code to SQL state if not already set
-                    if (sql_state_.empty()) {
-                        sql_state_ = mapErrorCodeToSQLState(error_code_);
-                    }
+                    // SQL state is NOT derived here: the engine-provided
+                    // isc_arg_sql_state arrives later in the vector and must
+                    // win; the code->state map is only a fallback (see below).
                 }
 
                 auto& env = Environment::getInstance();
@@ -180,7 +193,8 @@ void FirebirdException::extractErrorDetails(Firebird::IStatus* status) {
             case isc_arg_sql_state: {
                 const char* st = reinterpret_cast<const char*>(errors[i++]);
                 status_vector_.push_back(makeTextEntry(tag, st));
-                if (st && sql_state_.empty()) sql_state_ = st;
+                // Explicit engine-provided SQLSTATE wins over the computed one
+                if (st && *st) sql_state_ = st;
                 break;
             }
             case isc_arg_interpreted: {
@@ -230,9 +244,11 @@ void FirebirdException::extractErrorDetails(Firebird::IStatus* status) {
         }
     }
 
-    // If we still don't have a SQL state, set default
+    // Fallbacks when the engine didn't supply isc_arg_sql_state:
+    // map the primary error code, else general error.
     if (sql_state_.empty()) {
-        sql_state_ = "HY000";
+        sql_state_ = error_code_ != 0 ? mapErrorCodeToSQLState(error_code_)
+                                      : "HY000";
     }
 }
 

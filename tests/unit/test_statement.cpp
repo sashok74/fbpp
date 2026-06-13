@@ -171,6 +171,98 @@ TEST_F(StatementTest, ExecuteReturningTuple) {
     tra2->Commit();
 }
 
+// VARCHAR(N) должен вмещать ровно N байт данных: ёмкость поля — это
+// getLength(), двухбайтовый префикс длины движок учитывает отдельно.
+// Регрессия: кодек резал данные до N-2 байт (off-by-two).
+TEST_F(StatementTest, VarcharFullByteLengthRoundTrip) {
+    auto ddl = connection_->Execute(
+        "CREATE TABLE varchar_len_test (id INTEGER, v VARCHAR(10) CHARACTER SET OCTETS)");
+    ddl->Commit();
+
+    const std::string payload(10, 'A');  // ровно 10 байт — легально для VARCHAR(10)
+
+    // JSON-путь записи
+    auto ins = connection_->prepareStatement(
+        "INSERT INTO varchar_len_test (id, v) VALUES (:id, :v)");
+    auto tx = connection_->StartTransaction();
+    nlohmann::json params = {{"id", 1}, {"v", payload}};
+    tx->execute(ins, params);
+
+    // Кортежный путь записи
+    auto ins2 = connection_->prepareStatement(
+        "INSERT INTO varchar_len_test (id, v) VALUES (?, ?)");
+    tx->execute(ins2, std::make_tuple(2, payload));
+    tx->Commit();
+
+    auto sel = connection_->prepareStatement(
+        "SELECT v FROM varchar_len_test ORDER BY id");
+    auto tx2 = connection_->StartTransaction();
+    auto rs = tx2->openCursor(sel);
+
+    std::tuple<std::string> row;
+    ASSERT_TRUE(rs->fetch(row));
+    EXPECT_EQ(std::get<0>(row), payload) << "JSON write path truncated VARCHAR";
+    ASSERT_TRUE(rs->fetch(row));
+    EXPECT_EQ(std::get<0>(row), payload) << "Tuple write path truncated VARCHAR";
+
+    rs->close();
+    tx2->Commit();
+
+    // Переполнение (11 байт в VARCHAR(10)) — ошибка, а не молчаливое усечение
+    auto tx3 = connection_->StartTransaction();
+    nlohmann::json tooLong = {{"id", 3}, {"v", std::string(11, 'B')}};
+    EXPECT_THROW(tx3->execute(ins, tooLong), FirebirdException);
+    tx3->Rollback();
+}
+
+// Курсор удерживает породивший его Statement: временный shared_ptr из
+// prepareStatement может умереть сразу (и кеш может быть очищен) — курсор
+// обязан остаться рабочим.
+TEST_F(StatementTest, CursorKeepsStatementAlive) {
+    auto ins = connection_->Execute(
+        "INSERT INTO statement_test (id, name, amount) VALUES (1, 'x', 1.0)");
+    ins->Commit();
+
+    auto tx = connection_->StartTransaction();
+    auto rs = tx->openCursor(
+        connection_->prepareStatement("SELECT id FROM statement_test"));
+    // Сбрасываем и кешовую ссылку — курсор остаётся единственным владельцем
+    connection_->clearStatementCache();
+
+    std::tuple<int> row;
+    ASSERT_TRUE(rs->fetch(row));
+    EXPECT_EQ(std::get<0>(row), 1);
+    rs->close();
+    tx->Commit();
+}
+
+// Курсор удерживает транзакцию: BLOB должен читаться даже после того, как
+// вызывающий отпустил свой shared_ptr на транзакцию. Раньше weak_ptr
+// истекал и BLOB молча приходил пустым.
+TEST_F(StatementTest, CursorKeepsTransactionAliveForBlobs) {
+    auto ddl = connection_->Execute(
+        "CREATE TABLE blob_own_test (id INTEGER, b BLOB SUB_TYPE TEXT)");
+    ddl->Commit();
+
+    {
+        auto tx0 = connection_->StartTransaction();
+        auto ins = connection_->prepareStatement(
+            "INSERT INTO blob_own_test (id, b) VALUES (?, ?)");
+        tx0->execute(ins, std::make_tuple(1, std::string("blob-content")));
+        tx0->Commit();
+    }
+
+    auto tx = connection_->StartTransaction();
+    auto rs = tx->openCursor(
+        connection_->prepareStatement("SELECT b FROM blob_own_test"));
+    tx.reset();  // вызывающий отпустил транзакцию — ей владеет курсор
+
+    std::tuple<std::string> row;
+    ASSERT_TRUE(rs->fetch(row));
+    EXPECT_EQ(std::get<0>(row), "blob-content");
+    rs->close();
+}
+
 TEST_F(StatementTest, GetMetadata) {
     auto stmt = connection_->prepareStatement(
         "SELECT id, name, amount FROM statement_test"

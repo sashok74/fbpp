@@ -37,7 +37,7 @@ protected:
     }
 };
 
-// Test basic cached statement retrieval
+// Test basic cached statement retrieval (checkout semantics)
 TEST_F(CachedStatementsTest, BasicCachedStatement) {
     const std::string sql = "SELECT * FROM test_cached WHERE id = ?";
 
@@ -45,18 +45,29 @@ TEST_F(CachedStatementsTest, BasicCachedStatement) {
     auto stmt1 = connection_->prepareStatement(sql);
     ASSERT_NE(stmt1, nullptr);
 
-    // Second call should return the same cached statement
+    // Second call while stmt1 is still held must give an EXCLUSIVE
+    // instance: shared use of one IStatement leaks cursors/timeouts
+    // between unrelated call sites.
     auto stmt2 = connection_->prepareStatement(sql);
     ASSERT_NE(stmt2, nullptr);
+    EXPECT_NE(stmt1.get(), stmt2.get());
 
-    // Verify they are the same statement object
-    EXPECT_EQ(stmt1.get(), stmt2.get());
-
-    // Check cache statistics
+    // Check cache statistics (hit = key found, even if an extra
+    // instance had to be prepared because stmt1 was checked out)
     auto stats = connection_->getCacheStatistics();
     EXPECT_EQ(stats.cacheSize, 1);
-    EXPECT_EQ(stats.hitCount, 1);  // Second call was a hit
+    EXPECT_EQ(stats.hitCount, 1);  // Second call was a (key) hit
     EXPECT_EQ(stats.missCount, 1); // First call was a miss
+
+    // After releasing, the instance returns to the pool and is reused.
+    Statement* raw1 = stmt1.get();
+    Statement* raw2 = stmt2.get();
+    stmt1.reset();
+    stmt2.reset();
+    auto stmt3 = connection_->prepareStatement(sql);
+    ASSERT_NE(stmt3, nullptr);
+    EXPECT_TRUE(stmt3.get() == raw1 || stmt3.get() == raw2)
+        << "Released instance was not reused from the pool";
 }
 
 TEST_F(CachedStatementsTest, ConnectionParamsCanDisableCache) {
@@ -148,9 +159,10 @@ TEST_F(CachedStatementsTest, CachedStatementValidity) {
     ASSERT_NE(stmt2, nullptr);
     ASSERT_TRUE(stmt2->isValid());
 
-    // Get the same statement again - should be cached
+    // Get the same SQL again while stmt1 is held — a distinct, valid
+    // instance (checkout semantics), still counted as a cache hit.
     auto stmt1_again = connection_->prepareStatement(sql1);
-    EXPECT_EQ(stmt1.get(), stmt1_again.get());  // Should be the same statement
+    EXPECT_NE(stmt1.get(), stmt1_again.get());
     ASSERT_TRUE(stmt1_again->isValid());
 
     // Check cache statistics
@@ -207,13 +219,9 @@ TEST_F(CachedStatementsTest, SQLNormalization) {
 
     ASSERT_NE(stmt1, nullptr);
 
-    // All should be the same cached statement
-    EXPECT_EQ(stmt1.get(), stmt2.get());
-    EXPECT_EQ(stmt1.get(), stmt3.get());
-    EXPECT_EQ(stmt1.get(), stmt4.get());
-    EXPECT_EQ(stmt1.get(), stmt5.get());
-
-    // Check cache statistics
+    // Normalization is proven by the statistics: all five spellings map
+    // to ONE cache entry, the first is the only miss. (The pointers are
+    // distinct while held — checkout semantics.)
     auto stats = connection_->getCacheStatistics();
     EXPECT_EQ(stats.cacheSize, 1);   // Only one entry
     EXPECT_EQ(stats.missCount, 1);   // Only first was a miss
@@ -238,12 +246,65 @@ TEST_F(CachedStatementsTest, SQLNormalizationWithStrings) {
     // Different string literals = different statements
     EXPECT_NE(stmt1.get(), stmt2.get());
 
-    // Same string literal, different SQL case = same statement
-    EXPECT_EQ(stmt1.get(), stmt3.get());
-
-    // Check cache statistics
+    // Same string literal, different SQL case = same cache entry:
+    // cacheSize stays 2 and the third prepare counts as a hit.
     auto stats = connection_->getCacheStatistics();
     EXPECT_EQ(stats.cacheSize, 2);   // Two different entries
+    EXPECT_EQ(stats.hitCount, 1);    // sql3 hit sql1's entry
+}
+
+// Два открытых курсора по ОДНОМУ SQL одновременно: до checkout-семантики
+// оба вызова получали один IStatement, и второй openCursor падал с
+// "attempt to reopen an open cursor".
+TEST_F(CachedStatementsTest, NestedCursorsOnSameSqlDoNotCollide) {
+    {
+        auto tx0 = connection_->StartTransaction();
+        auto ins = connection_->prepareStatement(
+            "INSERT INTO test_cached (id, name) VALUES (?, ?)");
+        tx0->execute(ins, std::make_tuple(1, std::string("a")));
+        tx0->execute(ins, std::make_tuple(2, std::string("b")));
+        tx0->Commit();
+    }
+
+    const std::string sql = "SELECT id FROM test_cached ORDER BY id";
+    auto tx = connection_->StartTransaction();
+
+    auto stmtA = connection_->prepareStatement(sql);
+    auto rsA = tx->openCursor(stmtA);
+    std::tuple<int> row;
+    ASSERT_TRUE(rsA->fetch(row));
+    EXPECT_EQ(std::get<0>(row), 1);
+
+    // Пока rsA открыт — тот же SQL ещё раз
+    auto stmtB = connection_->prepareStatement(sql);
+    EXPECT_NE(stmtA.get(), stmtB.get());
+    auto rsB = tx->openCursor(stmtB);
+    ASSERT_TRUE(rsB->fetch(row));
+    EXPECT_EQ(std::get<0>(row), 1);
+
+    // rsA жив и сохранил позицию
+    ASSERT_TRUE(rsA->fetch(row));
+    EXPECT_EQ(std::get<0>(row), 2);
+
+    rsA->close();
+    rsB->close();
+    tx->Commit();
+}
+
+// free() на выданном инстансе не должен отравлять пул: следующий
+// prepareStatement обязан вернуть валидный стейтмент.
+TEST_F(CachedStatementsTest, FreedInstanceDoesNotPoisonPool) {
+    const std::string sql = "SELECT * FROM test_cached WHERE id = ?";
+
+    auto stmt1 = connection_->prepareStatement(sql);
+    ASSERT_TRUE(stmt1->isValid());
+    stmt1->free();
+    EXPECT_FALSE(stmt1->isValid());
+    stmt1.reset();  // инвалидный инстанс должен быть отброшен, не запулен
+
+    auto stmt2 = connection_->prepareStatement(sql);
+    ASSERT_NE(stmt2, nullptr);
+    EXPECT_TRUE(stmt2->isValid());
 }
 
 // Test supported parallel usage: one connection (and one cache) per thread.
