@@ -158,17 +158,20 @@ public:
     // Construct from ISC_DATE
     explicit Date(uint32_t isc_date) : date_(isc_date) {}
 
-    // Construct from year, month, day
+    // Construct from year, month, day.
+    // Pure civil-date arithmetic (Howard Hinnant's days_from_civil):
+    // the previous mktime-based version interpreted the components as
+    // LOCAL time, so on a UTC+N machine Date(2024,1,1) stored 2023-12-31,
+    // and Windows mktime fails outright for pre-1970 dates.
     Date(int year, unsigned month, unsigned day) {
-        std::tm tm = {};
-        tm.tm_year = year - 1900;
-        tm.tm_mon = static_cast<int>(month) - 1;
-        tm.tm_mday = static_cast<int>(day);
-        tm.tm_isdst = -1;
-
-        auto tp = std::chrono::system_clock::from_time_t(std::mktime(&tm));
-        auto [fb_date, _] = timestamp_utils::to_firebird_timestamp(tp);
-        date_ = fb_date;
+        const int y = year - (month <= 2 ? 1 : 0);
+        const int era = (y >= 0 ? y : y - 399) / 400;
+        const unsigned yoe = static_cast<unsigned>(y - era * 400);                 // [0, 399]
+        const unsigned doy = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+        const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;                // [0, 146096]
+        const int days_since_unix_epoch = era * 146097 + static_cast<int>(doe) - 719468;
+        // Firebird epoch 1858-11-17 = MJD 0; Unix epoch 1970-01-01 = MJD 40587
+        date_ = static_cast<uint32_t>(days_since_unix_epoch + 40587);
     }
 
     // Construct from time_point (truncates time)

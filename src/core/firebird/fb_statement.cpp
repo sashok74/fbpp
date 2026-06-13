@@ -5,6 +5,7 @@
 #include "fbpp/core/result_set.hpp"
 #include "fbpp/core/batch.hpp"
 #include "fbpp/core/exception.hpp"
+#include "fbpp/core/detail/firebird_raii.hpp"
 #include <cstring>
 
 namespace fbpp {
@@ -30,9 +31,12 @@ Statement::Statement(Statement&& other) noexcept
       outputMetadata_(std::move(other.outputMetadata_)),
       type_(other.type_),
       flags_(other.flags_),
-      metadataLoaded_(other.metadataLoaded_) {
+      metadataLoaded_(other.metadataLoaded_),
+      namedParamMapping_(std::move(other.namedParamMapping_)),
+      hasNamedParams_(other.hasNamedParams_) {
     other.statement_ = nullptr;
     other.connection_ = nullptr;
+    other.hasNamedParams_ = false;
 }
 
 Statement& Statement::operator=(Statement&& other) noexcept {
@@ -45,9 +49,12 @@ Statement& Statement::operator=(Statement&& other) noexcept {
         type_ = other.type_;
         flags_ = other.flags_;
         metadataLoaded_ = other.metadataLoaded_;
-        
+        namedParamMapping_ = std::move(other.namedParamMapping_);
+        hasNamedParams_ = other.hasNamedParams_;
+
         other.statement_ = nullptr;
         other.connection_ = nullptr;
+        other.hasNamedParams_ = false;
     }
     return *this;
 }
@@ -119,34 +126,11 @@ std::unique_ptr<ResultSet> Statement::openCursor(Transaction* transaction, unsig
 }
 
 std::unique_ptr<ResultSet> Statement::openCursor(std::shared_ptr<Transaction> transaction) {
-    if (!statement_) {
-        throw FirebirdException("Statement is not prepared");
-    }
-    if (!transaction || !transaction->isActive()) {
+    if (!transaction) {
         throw FirebirdException("Invalid or inactive transaction");
     }
-    
-    auto& st = status();
-    
-    auto tra = transaction->getRawTransaction();
-    auto cursor = statement_->openCursor(&st, tra, nullptr, nullptr, nullptr, 0);
-    
-    if (!cursor) {
-        throw FirebirdException("Failed to open cursor");
-    }
-    
-    // Get output metadata for the result set
-    auto meta = statement_->getOutputMetadata(&st);
-    auto metadataWrapper = std::make_unique<MessageMetadata>(meta);
-    
-    // Create ResultSet with shared_ptr to transaction
-    try {
-        auto transactionShared = transaction->shared_from_this();
-        return std::make_unique<ResultSet>(cursor, std::move(metadataWrapper), transactionShared);
-    } catch (const std::bad_weak_ptr&) {
-        // If transaction is not managed by shared_ptr, create ResultSet without it
-        return std::make_unique<ResultSet>(cursor, std::move(metadataWrapper));
-    }
+    // The raw-pointer overload recovers the shared_ptr via shared_from_this().
+    return openCursor(transaction.get(), nullptr, nullptr, nullptr, 0);
 }
 
 std::unique_ptr<ResultSet> Statement::openCursor(Transaction* transaction,
@@ -161,29 +145,39 @@ std::unique_ptr<ResultSet> Statement::openCursor(Transaction* transaction,
         throw FirebirdException("Invalid or inactive transaction");
     }
     
-    auto& st = status();
-    
-    auto tra = transaction->getRawTransaction();
-    // Cast away const for Firebird API (it doesn't modify the buffer)
-    auto cursor = statement_->openCursor(&st, tra, inMetadata, const_cast<void*>(inBuffer), outMetadata, flags);
-    
-    if (!cursor) {
-        throw FirebirdException("Failed to open cursor");
-    }
-    
-    // Get output metadata for the result set
-    auto meta = outMetadata ? outMetadata : statement_->getOutputMetadata(&st);
-    auto metadataWrapper = std::make_unique<MessageMetadata>(meta);
-    
-    // Get shared_ptr from Transaction using shared_from_this
-    // Transaction must be managed by shared_ptr for this to work
     try {
-        auto transactionShared = transaction->shared_from_this();
-        return std::make_unique<ResultSet>(cursor, std::move(metadataWrapper), transactionShared);
-    } catch (const std::bad_weak_ptr&) {
-        // If transaction is not managed by shared_ptr, create ResultSet without it
-        // This means BLOBs won't be loaded automatically
-        return std::make_unique<ResultSet>(cursor, std::move(metadataWrapper));
+        auto& st = status();
+
+        auto tra = transaction->getRawTransaction();
+        // Cast away const for Firebird API (it doesn't modify the buffer)
+        auto cursor = statement_->openCursor(&st, tra, inMetadata, const_cast<void*>(inBuffer), outMetadata, flags);
+
+        if (!cursor) {
+            throw FirebirdException("Failed to open cursor");
+        }
+
+        // Anything failing past this point must close+release the cursor,
+        // or it stays open server-side on the transaction.
+        try {
+            auto meta = outMetadata ? outMetadata : statement_->getOutputMetadata(&st);
+            auto metadataWrapper = std::make_unique<MessageMetadata>(meta);
+
+            // Get shared_ptr from Transaction using shared_from_this
+            try {
+                auto transactionShared = transaction->shared_from_this();
+                return std::make_unique<ResultSet>(cursor, std::move(metadataWrapper), transactionShared);
+            } catch (const std::bad_weak_ptr&) {
+                // If transaction is not managed by shared_ptr, create ResultSet without it
+                // This means BLOBs won't be loaded automatically
+                return std::make_unique<ResultSet>(cursor, std::move(metadataWrapper));
+            }
+        } catch (...) {
+            try { cursor->close(&st); } catch (...) { /* best effort */ }
+            cursor->release();
+            throw;
+        }
+    } catch (const Firebird::FbException& e) {
+        throw FirebirdException(e);
     }
 }
 
@@ -192,10 +186,17 @@ unsigned Statement::getType() const {
         throw FirebirdException("Statement is not prepared");
     }
 
+    // type_ and flags_ share metadataLoaded_, so both must be loaded
+    // together — otherwise whichever getter runs second returns 0 forever.
     if (!metadataLoaded_) {
-        auto& st = status();
-        type_ = statement_->getType(&st);
-        metadataLoaded_ = true;
+        try {
+            auto& st = status();
+            type_ = statement_->getType(&st);
+            flags_ = statement_->getFlags(&st);
+            metadataLoaded_ = true;
+        } catch (const Firebird::FbException& e) {
+            throw FirebirdException(e);
+        }
     }
 
     return type_;
@@ -238,12 +239,18 @@ unsigned Statement::getFlags() const {
         throw FirebirdException("Statement is not prepared");
     }
     
+    // Loads both fields — see getType().
     if (!metadataLoaded_) {
-        auto& st = status();
-        flags_ = statement_->getFlags(&st);
-        metadataLoaded_ = true;
+        try {
+            auto& st = status();
+            type_ = statement_->getType(&st);
+            flags_ = statement_->getFlags(&st);
+            metadataLoaded_ = true;
+        } catch (const Firebird::FbException& e) {
+            throw FirebirdException(e);
+        }
     }
-    
+
     return flags_;
 }
 
@@ -252,20 +259,28 @@ std::string Statement::getPlan(bool detailed) const {
         throw FirebirdException("Statement is not prepared");
     }
     
-    auto& st = status();
-    
-    const char* plan = statement_->getPlan(&st, detailed);
-    return plan ? std::string(plan) : std::string();
+    try {
+        auto& st = status();
+
+        const char* plan = statement_->getPlan(&st, detailed);
+        return plan ? std::string(plan) : std::string();
+    } catch (const Firebird::FbException& e) {
+        throw FirebirdException(e);
+    }
 }
 
 uint64_t Statement::getAffectedRecords() const {
     if (!statement_) {
         throw FirebirdException("Statement is not prepared");
     }
-    
-    auto& st = status();
-    
-    return statement_->getAffectedRecords(&st);
+
+    try {
+        auto& st = status();
+
+        return statement_->getAffectedRecords(&st);
+    } catch (const Firebird::FbException& e) {
+        throw FirebirdException(e);
+    }
 }
 
 std::unique_ptr<MessageMetadata> Statement::getInputMetadata() const {
@@ -292,34 +307,46 @@ std::unique_ptr<MessageMetadata> Statement::getOutputMetadata() const {
         throw FirebirdException("Statement is not prepared");
     }
     
-    auto& st = status();
-    
-    auto meta = statement_->getOutputMetadata(&st);
-    if (meta) {
-        return std::make_unique<MessageMetadata>(meta);
+    try {
+        auto& st = status();
+
+        auto meta = statement_->getOutputMetadata(&st);
+        if (meta) {
+            return std::make_unique<MessageMetadata>(meta);
+        }
+
+        return nullptr;
+    } catch (const Firebird::FbException& e) {
+        throw FirebirdException(e);
     }
-    
-    return nullptr;
 }
 
 unsigned Statement::getTimeout() const {
     if (!statement_) {
         throw FirebirdException("Statement is not prepared");
     }
-    
-    auto& st = status();
-    
-    return statement_->getTimeout(&st);
+
+    try {
+        auto& st = status();
+
+        return statement_->getTimeout(&st);
+    } catch (const Firebird::FbException& e) {
+        throw FirebirdException(e);
+    }
 }
 
 void Statement::setTimeout(unsigned timeout) {
     if (!statement_) {
         throw FirebirdException("Statement is not prepared");
     }
-    
-    auto& st = status();
-    
-    statement_->setTimeout(&st, timeout);
+
+    try {
+        auto& st = status();
+
+        statement_->setTimeout(&st, timeout);
+    } catch (const Firebird::FbException& e) {
+        throw FirebirdException(e);
+    }
 }
 
 Firebird::IBatch* Statement::createBatch(Firebird::IMessageMetadata* inMetadata,
@@ -336,12 +363,20 @@ Firebird::IBatch* Statement::createBatch(Firebird::IMessageMetadata* inMetadata,
 
 void Statement::free() {
     if (statement_) {
-        auto& st = status();
-        statement_->free(&st);
+        try {
+            auto& st = status();
+            statement_->free(&st);
+        } catch (const Firebird::FbException& e) {
+            // Still release and null the interface — a failed free() (e.g.
+            // dead attachment) must not leave a dangling pointer behind.
+            statement_->release();
+            statement_ = nullptr;
+            throw FirebirdException(e);
+        }
         // FB5 client: free() does not release the interface (see cleanup()).
         statement_->release();
         statement_ = nullptr;
-        
+
         // Clear cached metadata
         inputMetadata_.reset();
         outputMetadata_.reset();
@@ -371,28 +406,28 @@ std::unique_ptr<Batch> Statement::createBatch(Transaction* transaction,
             throw FirebirdException("Statement has no input parameters for batch");
         }
         
-        // Build batch parameters
+        // Build batch parameters (RAII guard disposes the builder on all
+        // paths, including throws from insertInt/createBatch)
         auto& st = status();
         auto util = env_.getMaster()->getUtilInterface();
-        auto pb = util->getXpbBuilder(&st, Firebird::IXpbBuilder::BATCH, nullptr, 0);
-        
+        detail::XpbBuilderGuard pb(
+            util->getXpbBuilder(&st, Firebird::IXpbBuilder::BATCH, nullptr, 0));
+
         // Set batch options
         if (recordCounts) {
             pb->insertInt(&st, Firebird::IBatch::TAG_RECORD_COUNTS, 1);
         }
-        
+
         if (continueOnError) {
             pb->insertInt(&st, Firebird::IBatch::TAG_MULTIERROR, 1);
         }
-        
+
         // Create Firebird batch through statement
         auto fbBatch = statement_->createBatch(&st,
                                                inMeta->getRawMetadata(),
                                                pb->getBufferLength(&st),
                                                pb->getBuffer(&st));
-        
-        pb->dispose();
-        
+
         if (!fbBatch) {
             throw FirebirdException("Failed to create batch");
         }

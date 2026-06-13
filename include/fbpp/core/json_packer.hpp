@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
+#include <algorithm>
 #include <sstream>
 #include <iomanip>
 #include "fbpp/core/detail/conversion_utils.hpp"
@@ -40,7 +41,13 @@ inline void packJsonValue(const nlohmann::json& value, uint8_t* buffer,
     } else if (value.is_boolean()) {
         sql_value_codec::write_sql_value(ctx, value.get<bool>(), data_ptr);
     } else if (value.is_number_integer()) {
-        if (field.type == SQL_INT128 || field.type == SQL_DEC16 || field.type == SQL_DEC34) {
+        // JSON unsigned > INT64_MAX would wrap negative through get<int64_t>;
+        // route it through the string path (INT128 can hold it, narrower
+        // columns get a proper range error).
+        if (value.is_number_unsigned() &&
+            value.get<uint64_t>() > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+            sql_value_codec::write_sql_value(ctx, std::to_string(value.get<uint64_t>()), data_ptr);
+        } else if (field.type == SQL_INT128 || field.type == SQL_DEC16 || field.type == SQL_DEC34) {
             // Convert to string for extended types to ensure correct parsing/conversion via Firebird API
             sql_value_codec::write_sql_value(ctx, std::to_string(value.get<int64_t>()), data_ptr);
         } else {
@@ -75,7 +82,28 @@ inline void packJsonToBuffer(const nlohmann::json& jsonData, uint8_t* buffer,
             " elements, but query expects " + std::to_string(fieldCount) + " parameters"
         );
     }
-    
+
+    if (isObject) {
+        // Only positional index keys ("0", "1", ...) are meaningful here —
+        // named keys are converted to an array earlier (NamedParamHelper).
+        // A non-index key reaching this point used to silently turn the
+        // parameter into NULL (e.g. named keys passed to a '?' statement).
+        for (auto& [key, val] : jsonData.items()) {
+            (void)val;
+            const bool isIndex = !key.empty() &&
+                std::all_of(key.begin(), key.end(),
+                            [](unsigned char c) { return std::isdigit(c); });
+            if (!isIndex || std::stoull(key) >= fieldCount) {
+                throw FirebirdException(
+                    "Invalid parameter key '" + key + "': query has " +
+                    std::to_string(fieldCount) +
+                    " positional parameters (use indexes \"0\"..\"" +
+                    std::to_string(fieldCount - 1) +
+                    "\" or named parameters in the SQL)");
+            }
+        }
+    }
+
     // Pack each field
     for (unsigned i = 0; i < fieldCount; ++i) {
         // Get field info from metadata
