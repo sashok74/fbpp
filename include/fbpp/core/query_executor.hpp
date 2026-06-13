@@ -12,6 +12,16 @@
 
 namespace fbpp::core {
 
+/// Intended execution mode of a generated query descriptor. Emitted by the
+/// code generator as `Descriptor::mode` so callers (and future generic
+/// dispatchers) know which executeXxx entry point fits the statement:
+///   Select     -> executeQuery / fetchOne (set-returning cursor)
+///   Returning  -> executeReturning / executeReturningOne (single row out)
+///   Modify     -> executeNonQuery (affected count, no output)
+///   Ddl        -> Connection::ExecuteDDL
+/// It is advisory; hand-written descriptors may omit it.
+enum class QueryMode { Unknown, Select, Modify, Returning, Ddl };
+
 struct NoResult {};
 
 template<>
@@ -66,6 +76,32 @@ std::optional<typename Descriptor::Output> fetchOne(Connection& connection,
         return row;
     }
     return std::nullopt;
+}
+
+/// Execute a singleton statement that BOTH takes parameters and returns one
+/// row of output — `INSERT/UPDATE/DELETE ... RETURNING` of a single row, or
+/// `EXECUTE PROCEDURE` with OUT parameters. Returns {affectedRows, output}.
+///
+/// For set-returning statements (`SELECT`, selectable stored procedures, or
+/// multi-row `RETURNING`) use executeQuery/fetchOne instead — those open a
+/// cursor; this path reads exactly one output message.
+template<typename Descriptor>
+std::pair<unsigned, typename Descriptor::Output> executeReturning(
+        Connection& connection,
+        Transaction& transaction,
+        const typename Descriptor::Input& params) {
+    auto statement = connection.prepareStatement(std::string(Descriptor::sql));
+    return transaction.execute(statement, params, typename Descriptor::Output{});
+}
+
+/// Convenience over executeReturning() when the affected-row count is not
+/// needed — returns just the output row.
+template<typename Descriptor>
+typename Descriptor::Output executeReturningOne(
+        Connection& connection,
+        Transaction& transaction,
+        const typename Descriptor::Input& params) {
+    return executeReturning<Descriptor>(connection, transaction, params).second;
 }
 
 template<typename Descriptor>
