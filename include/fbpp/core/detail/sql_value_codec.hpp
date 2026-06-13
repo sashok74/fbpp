@@ -340,22 +340,27 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
             ISC_QUAD blobId = createBlob(ctx.transaction, blobData);
             std::memcpy(dataPtr, &blobId, sizeof(ISC_QUAD));
         } else if (ctx.field && (ctx.field->type == SQL_TEXT || ctx.field->type == SQL_VARYING)) {
+            // IMessageMetadata::getLength() returns the DATA capacity in
+            // bytes; for SQL_VARYING the 2-byte length prefix is accounted
+            // for separately by the engine when laying out offsets.
+            // Oversize input raises an error (mirroring the engine's
+            // "string right truncation") instead of silently corrupting data.
+            if (strValue.size() > static_cast<size_t>(ctx.field->length)) {
+                throw FirebirdException(
+                    "String value too long for field " + ctx.field->name +
+                    ": " + std::to_string(strValue.size()) + " bytes, field holds " +
+                    std::to_string(ctx.field->length) + " bytes");
+            }
             if (ctx.field->type == SQL_TEXT) {
-                size_t copyLen = std::min(strValue.size(), static_cast<size_t>(ctx.field->length));
-                std::memcpy(dataPtr, strValue.data(), copyLen);
-                if (copyLen < ctx.field->length) {
-                    std::memset(dataPtr + copyLen, ' ', ctx.field->length - copyLen);
+                std::memcpy(dataPtr, strValue.data(), strValue.size());
+                if (strValue.size() < ctx.field->length) {
+                    std::memset(dataPtr + strValue.size(), ' ',
+                                ctx.field->length - strValue.size());
                 }
             } else { // SQL_VARYING
-                unsigned maxDataLength = ctx.field->length - sizeof(uint16_t);
-                size_t actualLen = strValue.length();
-                if (actualLen > maxDataLength) {
-                    // Truncate
-                    actualLen = maxDataLength;
-                }
-                uint16_t len = static_cast<uint16_t>(actualLen);
+                uint16_t len = static_cast<uint16_t>(strValue.size());
                 std::memcpy(dataPtr, &len, sizeof(uint16_t));
-                std::memcpy(dataPtr + sizeof(uint16_t), strValue.data(), actualLen);
+                std::memcpy(dataPtr + sizeof(uint16_t), strValue.data(), strValue.size());
             }
         } else if (ctx.field) {
             // Handle extended types conversion from string
@@ -407,25 +412,24 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
                 }
                 case SQL_TIMESTAMP_TZ: {
                     unsigned year, month, day, hours, minutes, seconds, fractions;
-                    size_t tzPos = strValue.find_last_of("+-");
-                    if (tzPos == std::string::npos || tzPos < 19) {
-                        throw FirebirdException("TIMESTAMP_TZ requires timezone offset: " + strValue);
-                    }
-                    std::string dtStr = strValue.substr(0, tzPos);
-                    std::string tzStr = strValue.substr(tzPos);
-                    
+                    std::string dtStr, tzStr;
+                    splitTzSuffix(strValue, 19, dtStr, tzStr);
+
                     parseIsoDate(dtStr.substr(0, 10), year, month, day);
                     parseIsoTime(dtStr.substr(11), hours, minutes, seconds, fractions);
-                    
-                    ISC_DATE date = util->encodeDate(year, month, day);
-                    ISC_TIME time = util->encodeTime(hours, minutes, seconds, fractions);
-                    int16_t offset = parseTimezoneOffset(tzStr);
-                    uint16_t zoneId = static_cast<uint16_t>(offset); // fallback: mirror offset into zone id for offset-only usage
-                    
-                    std::memcpy(dataPtr, &date, 4);
-                    std::memcpy(dataPtr + 4, &time, 4);
-                    std::memcpy(dataPtr + 8, &zoneId, 2);
-                    std::memcpy(dataPtr + 10, &offset, 2);
+
+                    // Delegate to the engine: encodeTimeStampTz converts the
+                    // wall-clock time to UTC and encodes the zone id properly
+                    // (offset zones are stored as displacement+1439, names as
+                    // IANA ids). Hand-rolling this produced values other
+                    // clients could not decode.
+                    ISC_TIMESTAMP_TZ tstz{};
+                    util->encodeTimeStampTz(&status, &tstz, year, month, day,
+                                            hours, minutes, seconds, fractions,
+                                            tzStr.c_str());
+                    std::memcpy(dataPtr, &tstz.utc_timestamp.timestamp_date, 4);
+                    std::memcpy(dataPtr + 4, &tstz.utc_timestamp.timestamp_time, 4);
+                    std::memcpy(dataPtr + 8, &tstz.time_zone, 2);
                     break;
                 }
                 case SQL_TYPE_TIME: {
@@ -436,23 +440,19 @@ void write_sql_value(const SqlWriteContext& ctx, const T& value, uint8_t* dataPt
                     break;
                 }
                 case SQL_TIME_TZ: {
-                    size_t tzPos = strValue.find_last_of("+-");
-                    if (tzPos == std::string::npos || tzPos < 8) {
-                        throw FirebirdException("TIME_TZ requires timezone offset: " + strValue);
-                    }
-                    std::string timeStr = strValue.substr(0, tzPos);
-                    std::string tzStr = strValue.substr(tzPos);
-                    
+                    std::string timeStr, tzStr;
+                    splitTzSuffix(strValue, 8, timeStr, tzStr);
+
                     unsigned hours, minutes, seconds, fractions;
                     parseIsoTime(timeStr, hours, minutes, seconds, fractions);
-                    
-                    ISC_TIME time = util->encodeTime(hours, minutes, seconds, fractions);
-                    int16_t offset = parseTimezoneOffset(tzStr);
-                    uint16_t zoneId = static_cast<uint16_t>(offset); // store offset in zone id as fallback
-                    
-                    std::memcpy(dataPtr, &time, 4);
-                    std::memcpy(dataPtr + 4, &zoneId, 2);
-                    std::memcpy(dataPtr + 6, &offset, 2);
+
+                    // Delegate zone encoding + UTC conversion to the engine
+                    // (see SQL_TIMESTAMP_TZ above).
+                    ISC_TIME_TZ ttz{};
+                    util->encodeTimeTz(&status, &ttz, hours, minutes, seconds,
+                                       fractions, tzStr.c_str());
+                    std::memcpy(dataPtr, &ttz.utc_time, 4);
+                    std::memcpy(dataPtr + 4, &ttz.time_zone, 2);
                     break;
                 }
                 case SQL_TYPE_DATE: {
@@ -679,24 +679,30 @@ void read_sql_value(const SqlReadContext& ctx, const uint8_t* dataPtr, T& value)
                     break;
                 }
                 case SQL_TIMESTAMP_TZ: {
-                    ISC_TIMESTAMP utcTimestamp{};
-                    std::memcpy(&utcTimestamp.timestamp_date, dataPtr, 4);
-                    std::memcpy(&utcTimestamp.timestamp_time, dataPtr + 4, 4);
-                    int16_t offset{};
-                    std::memcpy(&offset, dataPtr + 10, 2);
-                    if (offset == 0) {
-                        uint16_t zoneRaw{};
-                        std::memcpy(&zoneRaw, dataPtr + 8, 2);
-                        offset = static_cast<int16_t>(zoneRaw); // fallback if server echoed offset in zone field
-                    }
+                    // The wire value is UTC timestamp + Firebird zone id;
+                    // the engine decodes it back to wall-clock time and a
+                    // zone string ("+05:00" for offset zones, IANA name for
+                    // region zones). The old code read the offset from
+                    // struct padding bytes, which are not part of the type.
+                    ISC_TIMESTAMP_TZ tstz{};
+                    std::memcpy(&tstz.utc_timestamp.timestamp_date, dataPtr, 4);
+                    std::memcpy(&tstz.utc_timestamp.timestamp_time, dataPtr + 4, 4);
+                    std::memcpy(&tstz.time_zone, dataPtr + 8, 2);
                     unsigned year, month, day, hours, minutes, seconds, fractions;
-                    util->decodeDate(utcTimestamp.timestamp_date, &year, &month, &day);
-                    util->decodeTime(utcTimestamp.timestamp_time, &hours, &minutes, &seconds, &fractions);
-                    int offset_hours = offset / 60;
-                    int offset_minutes = std::abs(offset) % 60;
-                    std::snprintf(buffer, sizeof(buffer), "%04u-%02u-%02uT%02u:%02u:%02u.%04u%+03d:%02d",
-                                  year, month, day, hours, minutes, seconds, fractions, offset_hours, offset_minutes);
-                    value = buffer;
+                    char tzBuf[64] = {};
+                    util->decodeTimeStampTz(&status, &tstz, &year, &month, &day,
+                                            &hours, &minutes, &seconds, &fractions,
+                                            sizeof(tzBuf), tzBuf);
+                    std::snprintf(buffer, sizeof(buffer), "%04u-%02u-%02uT%02u:%02u:%02u.%04u",
+                                  year, month, day, hours, minutes, seconds, fractions);
+                    std::string out(buffer);
+                    if (tzBuf[0] == '+' || tzBuf[0] == '-') {
+                        out += tzBuf;          // offset zone: append directly
+                    } else if (tzBuf[0] != '\0') {
+                        out += ' ';
+                        out += tzBuf;          // region zone: " Europe/Moscow"
+                    }
+                    value = std::move(out);
                     break;
                 }
                 case SQL_TYPE_TIME: {
@@ -710,22 +716,25 @@ void read_sql_value(const SqlReadContext& ctx, const uint8_t* dataPtr, T& value)
                     break;
                 }
                 case SQL_TIME_TZ: {
-                    ISC_TIME utcTime{};
-                    std::memcpy(&utcTime, dataPtr, 4);
-                    int16_t offset{};
-                    std::memcpy(&offset, dataPtr + 6, 2);
-                    if (offset == 0) {
-                        uint16_t zoneRaw{};
-                        std::memcpy(&zoneRaw, dataPtr + 4, 2);
-                        offset = static_cast<int16_t>(zoneRaw);
-                    }
+                    // See SQL_TIMESTAMP_TZ above: delegate decoding to the
+                    // engine instead of reading padding bytes.
+                    ISC_TIME_TZ ttz{};
+                    std::memcpy(&ttz.utc_time, dataPtr, 4);
+                    std::memcpy(&ttz.time_zone, dataPtr + 4, 2);
                     unsigned hours, minutes, seconds, fractions;
-                    util->decodeTime(utcTime, &hours, &minutes, &seconds, &fractions);
-                    int offset_hours = offset / 60;
-                    int offset_minutes = std::abs(offset) % 60;
-                    std::snprintf(buffer, sizeof(buffer), "%02u:%02u:%02u.%04u%+03d:%02d",
-                                  hours, minutes, seconds, fractions, offset_hours, offset_minutes);
-                    value = buffer;
+                    char tzBuf[64] = {};
+                    util->decodeTimeTz(&status, &ttz, &hours, &minutes, &seconds,
+                                       &fractions, sizeof(tzBuf), tzBuf);
+                    std::snprintf(buffer, sizeof(buffer), "%02u:%02u:%02u.%04u",
+                                  hours, minutes, seconds, fractions);
+                    std::string out(buffer);
+                    if (tzBuf[0] == '+' || tzBuf[0] == '-') {
+                        out += tzBuf;
+                    } else if (tzBuf[0] != '\0') {
+                        out += ' ';
+                        out += tzBuf;
+                    }
+                    value = std::move(out);
                     break;
                 }
                 case SQL_TYPE_DATE: {
