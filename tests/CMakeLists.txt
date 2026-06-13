@@ -408,6 +408,23 @@ target_link_libraries(test_procedure_metadata PRIVATE
 
 gtest_discover_tests(test_procedure_metadata)
 
+# EXECUTE PROCEDURE end-to-end (real stored procedure)
+add_executable(test_execute_procedure
+    unit/test_execute_procedure.cpp
+    test_base.cpp
+)
+
+target_link_libraries(test_execute_procedure PRIVATE
+    fbpp
+    fbpp_test_support
+    GTest::gtest
+    GTest::gtest_main
+    nlohmann_json::nlohmann_json
+    ${FIREBIRD_LIBRARIES}
+)
+
+gtest_discover_tests(test_execute_procedure)
+
 # Row runtime API: RowView (non-owning, transient)
 add_executable(test_row_view
     unit/test_row_view.cpp
